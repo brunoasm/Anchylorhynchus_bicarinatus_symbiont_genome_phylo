@@ -1,0 +1,24 @@
+# Large input data (available from NCBI)
+final_meta_assembly_palm_weevil.asm.p_ctg.fa
+reads/
+
+# Pipeline outputs
+meta_assembly/
+gtdbtk_out/
+ncbi_submission/
+checkm2_out/
+16s_phylogenetic_analysis/
+blast/
+
+# ncbi_submission_quality_filtered — keep only the .gb annotation file
+ncbi_submission_quality_filtered/*
+!ncbi_submission_quality_filtered/s7_ctg000008c
+ncbi_submission_quality_filtered/s7_ctg000008c/*
+!ncbi_submission_quality_filtered/s7_ctg000008c/*.gb
+
+# Logs
+*.out
+*.log
+
+# Claude Code settings
+.claude/

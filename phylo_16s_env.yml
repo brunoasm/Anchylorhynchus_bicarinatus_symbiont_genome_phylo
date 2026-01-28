@@ -1,0 +1,13 @@
+name: phylo_16s
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python>=3.10,<3.13
+  - biopython>=1.81
+  - pandas>=2.0
+  - iqtree>=2.2
+  - mafft>=7.520
+  - blast>=2.14  # BLAST+ command-line tools for remote BLAST
+  - openssl<3.5  # OpenSSL 3.6 has TLS handshake issues with NCBI servers
