@@ -1,4 +1,4 @@
-name: phylo_16s
+name: symbiont_phylo
 channels:
   - conda-forge
   - bioconda
@@ -7,7 +7,15 @@ dependencies:
   - python>=3.10,<3.13
   - biopython>=1.81
   - pandas>=2.0
-  - iqtree>=2.2
+  - iqtree>=3
   - mafft>=7.520
-  - blast>=2.14  # BLAST+ command-line tools for remote BLAST
+  - blast>=2.14
+  - minimap2>=2.26
+  - samtools>=1.17
+  - cd-hit
+  - diamond>=2.1
+  - eggnog-mapper>=2.1
+  - bmge>=1.12
+  - numpy>=1.24
+  - scipy>=1.11
   - openssl<3.5  # OpenSSL 3.6 has TLS handshake issues with NCBI servers

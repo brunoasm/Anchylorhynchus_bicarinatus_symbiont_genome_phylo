@@ -22,3 +22,18 @@ ncbi_submission_quality_filtered/s7_ctg000008c/*
 
 # Claude Code settings
 .claude/
+
+# Python cache
+__pycache__/
+
+# Large data directories
+eggnog_data/
+castelli_et_al/
+
+# Pipeline outputs (step 07)
+genome_phylogenetic_analysis/
+
+# Accessory documentation
+CODE_CHANGES_SUMMARY.md
+METADATA_FIX_COMPLETE.md
+METADATA_FIX_SUMMARY.md

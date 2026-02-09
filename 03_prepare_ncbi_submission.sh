@@ -8,6 +8,18 @@
 
 set -e
 
+# Configuration
+source /home/bdemedeiros/miniconda3/etc/profile.d/conda.sh
+ENV_NAME="symbiont_phylo"
+ENV_FILE="symbiont_phylo_env.yml"
+
+# Create or activate conda environment
+if ! conda env list | grep -q "^${ENV_NAME} "; then
+    echo "Creating conda environment '$ENV_NAME' from $ENV_FILE..."
+    conda env create -f "$ENV_FILE"
+fi
+conda activate "$ENV_NAME"
+
 GTDBTK_OUT="gtdbtk_out"
 META_ASSEMBLY="meta_assembly"
 NCBI_DIR="ncbi_submission"

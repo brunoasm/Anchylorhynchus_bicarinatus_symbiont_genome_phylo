@@ -19,8 +19,8 @@ CHECKM2_RESULTS="checkm2_out/quality_report.tsv"
 GTDBTK_RESULTS="gtdbtk_out/classify/gtdbtk.bac120.summary.tsv"
 READS="reads/no_chordata_contaminant_reads.fq.gz"
 HELPER_SCRIPT="filter_genomes_helper.py"
-ENV_NAME="genome_filter_coverage"
-ENV_FILE="genome_filter_coverage_env.yml"
+ENV_NAME="symbiont_phylo"
+ENV_FILE="symbiont_phylo_env.yml"
 
 MIN_COMPLETENESS=90.0
 MAX_CONTAMINATION=5.0
