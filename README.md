@@ -2,7 +2,7 @@
 
 This repository contains the analysis pipeline for bacterial genomes assembled from metagenomic data associated with the weevil *Anchylorhynchus bicarinatus*. Total DNA was extracted from the whole body of the insect, and non-insect reads were isolated using BlobTools. Bacterial genomes were then assembled from this metagenomic fraction using PacBio HiFi reads.
 
-The pipeline identifies, quality-filters, and characterizes metagenome-assembled genomes (MAGs), and places them phylogenetically using 16S rRNA.
+The pipeline identifies, quality-filters, and characterizes metagenome-assembled genomes (MAGs), and places them phylogenetically using genome-wide protein markers.
 
 ## Pipeline overview
 
@@ -31,9 +31,9 @@ checkm2_out/
     v
 ncbi_submission_quality_filtered/ (1 genome: s7_ctg000008c)
     |
-    |-- [06] 16S rRNA extraction, multi-source search, alignment, phylogenetic inference
+    |-- [06] Genome-based phylogenetic analysis
     v
-16s_phylogenetic_analysis/
+genome_phylogenetic_analysis/
 ```
 
 ## Input data
@@ -44,8 +44,6 @@ ncbi_submission_quality_filtered/ (1 genome: s7_ctg000008c)
 | `reads/no_chordata_contaminant_reads.fq.gz` | PacBio HiFi reads with chordate contaminant reads removed | [SRR36582439](https://www.ncbi.nlm.nih.gov/sra/SRR36582439) |
 
 These files are not tracked in the repository due to their size. Download them from NCBI before running the pipeline.
-
-The GenBank annotation file (`ncbi_submission_quality_filtered/s7_ctg000008c/s7_ctg000008c.bgpipe.output_838931.gb`) is tracked in the repository for convenience. It can also be retrieved from genome accession [JBTXKG000000000](https://www.ncbi.nlm.nih.gov/nuccore/JBTXKG000000000). This file is required as input to step 06.
 
 ## Step 01: Split assembly into individual contigs
 
@@ -105,120 +103,63 @@ A single genome passed the quality filter:
 |--------|---------------------|-------------|---------------|------|----------|
 | s7_ctg000008c | Bacteria; Pseudomonadota; Alphaproteobacteria; o\_\_WRAU01 | 98.93% | 0.00% | 1,231,242 bp | 67.4x |
 
-This genome represents a novel lineage within Alphaproteobacteria (order WRAU01, as classified by GTDB-Tk using RED placement). It consists of a single circular contig at 100% breadth of coverage. The genome was subsequently annotated externally (GenBank file: `s7_ctg000008c.bgpipe.output_838931.gb`).
+This genome represents a novel lineage within Alphaproteobacteria (order WRAU01, as classified by GTDB-Tk using RED placement). It consists of a single circular contig at 100% breadth of coverage.
 
-## Step 06: 16S rRNA phylogenetic analysis
+## Step 06: Genome-based phylogenetic analysis
 
-**Script:** `06_16s_phylogenetic_analysis.sh`
-**Helper:** `phylo_16s_helper.py`
+**Script:** `06_genome_phylogenetic_analysis.sh`
+**Helper:** `phylo_genome_helper.py`
 **Environment file:** `symbiont_phylo_env.yml`
 
-Extracts the 16S rRNA gene from the annotated GenBank file, searches for related sequences from four independent sources, deduplicates, and builds a phylogenetic tree to place the organism among its closest relatives.
+Places the MAG within the phylogenomic framework of Castelli et al. (2025) to verify its relationship to Hepatincolaceae (WRAU01). Uses single-copy orthologous groups (OGs) from that study as a reference.
 
-**Dependencies:** Python >= 3.10, BioPython >= 1.81, pandas >= 2.0, BLAST+ >= 2.14, MAFFT >= 7.520, IQ-TREE >= 2.2, cd-hit
+**Dependencies:** Python >= 3.10, BioPython >= 1.81, pandas >= 2.0, eggNOG-mapper >= 2.1, diamond >= 2.0, MAFFT >= 7.520, BMGE >= 1.12, IQ-TREE >= 2.2
 
-### Data sources
+### Workflow
 
-The pipeline integrates 16S rRNA sequences from four independent sources:
+1. **eggNOG-mapper** -- Annotates predicted proteins from the MAG against the eggNOG database to assign orthologous groups.
 
-1. **BLAST** -- Remote BLAST against the NCBI nt database with entrez query `biomol_genomic[PROP] AND 16S[Title]`, retrieving the 100 most similar sequences. Command-line BLAST+ is used instead of the web API for reliability.
+2. **OG mapping** -- Maps eggNOG OG assignments to the 179 single-copy OG alignments from Castelli et al. (2025).
 
-2. **ARB SILVA** -- Nearest-neighbour sequences from a SILVA SSU search (minimum identity 0.7, 100 neighbours). The SILVA FASTA file is pre-downloaded from the [SILVA website](https://www.arb-silva.de/) and provided via the `SILVA_FASTA` environment variable. Accessions are parsed from SILVA `[nearest_slv=...]` headers. When the same genome has multiple 16S copies, only the longest region per accession is retained.
+3. **Target taxa extraction** -- For each mapped OG, extracts ~20 representative taxa from the Castelli alignment plus the MAG protein sequence.
 
-3. **GTDB WRAU01** -- 16S rRNA sequences from all genomes classified in the WRAU01 order within GTDB. Genome accessions are extracted from the GTDB-Tk MSA FASTA file by searching for WRAU01 in the taxonomic annotations. For each genome assembly, NCBI nucleotide records are searched and GenBank features are parsed for 16S rRNA annotations.
+4. **Alignment** -- Aligns each OG with MAFFT L-INS-i.
 
-4. **Castelli et al. 2025** -- 16S rRNA sequences from three *Hepatincolaceae* genome assemblies reported by [Castelli et al. (2025)](https://pmc.ncbi.nlm.nih.gov/articles/PMC11724238/). That study showed that the phylogenetic grouping of Hepatincolaceae with Holosporales was artefactual due to compositional biases, and that the family instead represents an independent lineage within Rhodospirillales. The three genomes included here (GCF\_000688235.1, GCA\_001510075.1, GCA\_045504435.1) provide additional phylogenetic context for placing the WRAU01 lineage relative to described Hepatincolaceae members. For each assembly, 16S is recovered from GenBank feature annotations or, when annotations are absent, by local BLAST of the query 16S against the genome contigs.
+5. **Trimming** -- Trims poorly aligned regions with BMGE (BLOSUM30 matrix).
 
-### Deduplication
+6. **Concatenation** -- Concatenates all trimmed alignments into a supermatrix with a RAxML-style partition file.
 
-After merging sequences from all four sources, accession-level deduplication is performed: when the same accession appears in multiple sources, one copy of the sequence is kept and all contributing source labels are recorded (e.g., `blast,silva`). The merged set is then further clustered with **cd-hit-est** at 99% identity (`-c 0.99 -n 10 -aS 0.9`), keeping the longest representative per cluster.
+7. **Compositional bias removal** -- Removes the most compositionally heterogeneous sites (top 30%) following Munoz-Gomez et al. (2019), as endosymbiont genomes often exhibit strong compositional biases that can mislead phylogenetic inference.
 
-### Reverse complement handling
+8. **Tree inference** -- Runs IQ-TREE 3 with ModelFinder testing LG, WAG, JTT and mixture models (LG+C20+F+R, LG+C60+F+R). Branch support assessed with 1000 ultrafast bootstraps and SH-aLRT.
 
-MAFFT alignment is run with `--adjustdirection`, which detects and reverse-complements sequences that are in the wrong orientation. After alignment, the `_R_` prefix that MAFFT adds to reverse-complemented sequences is stripped, and the identities of flipped sequences are logged.
+9. **Summary report** -- Generates `REPORT.md` with alignment statistics, model selection results, and tree summary.
 
-### Substeps
+### Input data
 
-1. **Clean old results** -- Removes previous output files (alignment, tree, metadata, combined FASTAs) to avoid stale data. BLAST XML and query FASTA are preserved if they exist (expensive to regenerate).
+Step 06 requires:
 
-2. **16S extraction** -- Extracts the 16S rRNA gene from the GenBank annotation.
-
-3. **BLAST search** -- Runs `blastn -remote` against the NCBI nt database (skipped if `blast_results.xml` already exists).
-
-4. **Retrieve BLAST sequences** -- Fetches full GenBank records for each BLAST hit via the NCBI Entrez API. Extracts organism name, host, isolation source, strain, and country.
-
-5. **Parse SILVA file** -- Parses SILVA nearest-neighbour FASTA headers to extract accession coordinates and similarity scores.
-
-6. **Retrieve SILVA sequences** -- Fetches 16S subsequences from GenBank for each SILVA hit, using `seq_start`/`seq_stop` parameters.
-
-7. **Parse GTDB WRAU01** -- Searches the GTDB MSA FASTA for WRAU01-classified genomes and extracts NCBI assembly accessions.
-
-8. **Retrieve GTDB 16S** -- For each WRAU01 genome, searches NCBI nucleotide records and parses GenBank features for 16S rRNA annotations.
-
-8b. **Retrieve Castelli et al. 16S** -- Retrieves 16S rRNA sequences from three Hepatincolaceae genome assemblies (Castelli et al. 2025) using the same annotation scan and BLAST fallback approach as the GTDB step.
-
-9. **Merge sources** -- Combines FASTA and metadata from all four sources plus the query, deduplicating by accession and tracking which sources contribute each sequence.
-
-10. **Deduplicate with cd-hit-est** -- Clusters at 99% identity, keeping longest representatives.
-
-11. **Metadata annotation** -- Classifies each sequence as symbiont or non-symbiont based on the presence of a host field or symbiont-associated keywords. Parses host taxonomy (genus, family, order, phylum, and associated NCBI Taxonomy IDs) via Entrez. Looks up microbial taxonomy for each organism and formats as a GTDB-style lineage string. Only sequences surviving deduplication are included.
-
-12. **Alignment** -- Aligns all surviving sequences with MAFFT (`--auto --adjustdirection`). Reverse-complemented sequences are logged and the `_R_` prefix is cleaned.
-
-13. **Tree inference** -- Runs IQ-TREE with ModelFinder in two separate passes (required by IQ-TREE 3, which does not allow mixing reversible and non-reversible models in a single run). The first pass tests the reversible GTR model (`-m MFP -mset GTR`). The second pass tests the non-reversible UNREST model plus all Lie Markov models (`-m MFP+LM -mset UNREST --nonrev-model`). Non-reversible and Lie Markov models are included because endosymbiont genomes are known to exhibit compositional heterogeneity and strand-asymmetric substitution patterns, violating the assumptions of time-reversible models. The Lie Markov models (Woodhams et al. 2015) provide a hierarchy of ~35 non-reversible models intermediate between GTR (6 rate parameters) and UNREST (12 rate parameters), allowing model selection to find the best trade-off between fit and complexity. No outgroup is specified for the non-reversible pass: these models infer the root position directly from substitution asymmetry in the data. The best model is selected by comparing BIC scores across both passes, and the corresponding tree files are copied to the final output names. Both model search spaces include empirical base frequencies (`-mfreq F`) and rate heterogeneity across sites (`-mrate E,I,G,R`). Branch support is assessed with 1000 ultrafast bootstrap replicates. Thread count is determined automatically (`-T AUTO`).
-
-14. **Summary report** -- Generates `REPORT.md` with per-source sequence counts, deduplication statistics, reverse-complement counts, symbiont breakdown, host taxonomy, alignment statistics, and the selected substitution model.
+- `checkm2_out/protein_files/s7_ctg000008c.faa` -- Predicted proteins from CheckM2 (generated automatically in step 04)
+- `castelli_et_al/single_ogs/` -- Single-copy OG alignments from Castelli et al. (2025). Not tracked in repository; obtain from the original study.
+- `eggnog_data/` -- eggNOG database files (downloaded automatically if absent)
 
 ### Output
 
-All output is written to `16s_phylogenetic_analysis/`:
+All output is written to `genome_phylogenetic_analysis/`:
 
 | File | Description |
 |------|-------------|
-| `query_16s.fasta` | Extracted 16S rRNA from query genome |
-| `blast_results.xml` | Raw BLAST output (XML format) |
-| `blast_hits.fasta` | FASTA sequences for BLAST hits |
-| `blast_hits_raw_metadata.tsv` | Raw metadata from BLAST GenBank records |
-| `silva_hits.tsv` | Parsed SILVA nearest-neighbour accessions |
-| `silva_hits.fasta` | FASTA sequences for SILVA hits |
-| `silva_hits_raw_metadata.tsv` | Raw metadata from SILVA GenBank records |
-| `gtdb_wrau01_accessions.txt` | WRAU01 genome accessions extracted from GTDB |
-| `gtdb_hits.fasta` | 16S sequences from GTDB WRAU01 genomes |
-| `gtdb_hits_raw_metadata.tsv` | Raw metadata from GTDB GenBank records |
-| `castelli_accessions.txt` | Castelli et al. 2025 genome accessions |
-| `castelli_hits.fasta` | 16S sequences from Castelli et al. 2025 genomes |
-| `castelli_hits_raw_metadata.tsv` | Raw metadata from Castelli GenBank records |
-| `all_sequences.fasta` | Merged sequences from all sources + query |
-| `all_sources_raw_metadata.tsv` | Merged raw metadata with source tracking |
-| `deduplicated.fasta` | After cd-hit-est 99% clustering |
-| `sequence_metadata.tsv` | Annotated metadata (deduplication survivors only) |
-| `alignment_raw.fasta` | Raw MAFFT alignment (with `_R_` prefixes) |
-| `alignment.fasta` | Cleaned MAFFT alignment |
-| `16s_tree.treefile` | Maximum-likelihood tree from the best model (Newick format) |
-| `16s_tree.iqtree` | IQ-TREE report for the best model |
-| `16s_tree_rev.iqtree` | IQ-TREE report for reversible model search (GTR) |
-| `16s_tree_nonrev.iqtree` | IQ-TREE report for non-reversible model search (UNREST + Lie Markov) |
+| `eggnog.emapper.annotations` | eggNOG-mapper annotations |
+| `eggnog.seed_orthologs` | Diamond hits in seed_orthologs format |
+| `og_mapping.tsv` | Mapping of MAG proteins to Castelli OG files |
+| `aligned_ogs/` | Per-OG alignments (MAFFT L-INS-i) |
+| `trimmed_ogs/` | Per-OG trimmed alignments (BMGE) |
+| `concatenated.fasta` | Supermatrix (all OGs) |
+| `partitions.txt` | RAxML-style partition file |
+| `concatenated_debiased.fasta` | After compositional bias removal |
+| `genome_tree.treefile` | Maximum-likelihood tree (Newick format) |
+| `genome_tree.iqtree` | IQ-TREE report |
 | `REPORT.md` | Summary report |
-
-### Metadata columns
-
-The annotated metadata table (`sequence_metadata.tsv`) contains:
-
-| Column | Description |
-|--------|-------------|
-| `accession` | NCBI accession number |
-| `taxon_name` | Cleaned organism name |
-| `source` | Data source(s): `blast`, `silva`, `gtdb`, `query`, or comma-separated combination |
-| `symbiont_status` | `symbiont` or `non-symbiont` |
-| `host_name` | Host organism name |
-| `host_taxon_id` | NCBI Taxonomy ID for the host |
-| `host_genus` / `host_genus_id` | Host genus name and NCBI Taxonomy ID |
-| `host_family` / `host_family_id` | Host family name and NCBI Taxonomy ID |
-| `host_order` / `host_order_id` | Host order name and NCBI Taxonomy ID |
-| `host_phylum` / `host_phylum_id` | Host phylum name and NCBI Taxonomy ID |
-| `isolation_organ` | Tissue/organ of isolation (e.g., gut, bacteriome) |
-| `annotation_source` | How host info was determined (`host_field`, `organism_name`, or `NA`) |
-| `microbial_lineage` | NCBI taxonomy of the microbe in GTDB-style format (`d__Name:ID;p__Name:ID;...`) |
 
 ## Conda environments
 
@@ -234,11 +175,8 @@ The pipeline uses three conda environments:
 
 All analyses are driven by shell scripts and Python helpers that can be re-run from scratch. Each step that requires specific software defines its dependencies in a conda environment YAML file, and the corresponding shell script creates the environment automatically if it does not already exist.
 
-An NCBI API key (environment variable `NCBI_API_KEY`) is recommended for steps that query NCBI Entrez, as it increases the rate limit from 3 to 10 requests per second.
-
-Step 06 accepts two optional environment variables:
-- `SILVA_FASTA` -- Path to a SILVA SSU search result FASTA file (nearest neighbours, min identity 0.7, 100 neighbours). If not set, the SILVA source is skipped.
-- `GTDB_MSA` -- Path to the GTDB-Tk MSA FASTA file (defaults to `gtdbtk_out/classify/gtdbtk.bac120.msa.fasta.gz`). If not found, the GTDB source is skipped.
+Step 06 accepts an optional environment variable:
+- `EGGNOG_DB_DIR` -- Path to eggNOG database directory (defaults to `eggnog_data/`). The database is downloaded automatically if not present.
 
 Scripts were developed with the assistance of Claude Code (Anthropic).
 
@@ -250,8 +188,9 @@ Scripts were developed with the assistance of Claude Code (Anthropic).
 | CheckM2 | (via conda) | Genome quality assessment |
 | minimap2 | >= 2.26 | Read mapping (PacBio HiFi) |
 | samtools | >= 1.17 | BAM processing and coverage |
-| BLAST+ | >= 2.14 | Remote BLAST search |
+| eggNOG-mapper | >= 2.1 | Functional annotation and OG assignment |
+| diamond | >= 2.0 | Protein sequence search |
 | MAFFT | >= 7.520 | Multiple sequence alignment |
+| BMGE | >= 1.12 | Alignment trimming |
 | IQ-TREE | >= 2.2 | Phylogenetic inference and model selection |
-| cd-hit | (via conda) | Sequence clustering and deduplication |
-| BioPython | >= 1.81 | Sequence parsing and NCBI Entrez queries |
+| BioPython | >= 1.81 | Sequence parsing |

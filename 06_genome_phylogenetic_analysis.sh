@@ -29,7 +29,7 @@ THREADS=20
 COMP_BIAS_THRESHOLD=0.30
 
 echo "=================================================="
-echo "Pipeline Step 07: Genome-based Phylogenetic Analysis"
+echo "Pipeline Step 06: Genome-based Phylogenetic Analysis"
 echo "=================================================="
 echo ""
 
@@ -262,7 +262,7 @@ python "$HELPER_SCRIPT" summary \
 echo ""
 
 echo "=================================================="
-echo "Pipeline Step 07 Complete"
+echo "Pipeline Step 06 Complete"
 echo "=================================================="
 echo ""
 echo "Output directory: $OUTPUT_DIR/"
