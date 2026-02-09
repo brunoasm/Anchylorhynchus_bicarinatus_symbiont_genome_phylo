@@ -18,7 +18,11 @@ Usage:
 """
 
 import argparse
+import subprocess
 import sys
+import time
+import urllib.parse
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pandas as pd
@@ -50,6 +54,81 @@ BIN_ID_TO_TIP = {
     "Terasakiella_pusilla_DSM_6293": "Terasakiella_pusilla_DSM_6293",
     "Thalassospira_profundimaris": "Thalassospira_profundimaris",
 }
+
+# Mapping from tip names to NCBI GenBank accessions (with version)
+TIP_TO_ACCESSION = {
+    "Symbiont_of_Haliotis": "GCA_002632265.1",
+    "Marine_MAG_001510075": "GCA_001510075.1",
+    "Marine_MAG_001830425": "GCA_001830425.1",
+    "Marine_MAG_002327565": "GCA_002327565.1",
+    "Marine_MAG_002687515": "GCA_002687515.1",
+    "Marine_MAG_009694195": "GCA_009694195.1",
+    "Marine_MAG_013204045": "GCA_013204045.1",
+    "Marine_MAG_014859895": "GCA_014859895.1",
+    "Marine_MAG_018662225": "GCA_018662225.1",
+    "Outgroup_009649675": "GCA_009649675.1",
+    "Symbiont_of_L_labralis": "GCA_009780035.1",
+    "Terasakiella_pusilla_DSM_6293": "GCA_000688235.1",
+    "Thalassospira_profundimaris": "GCA_000300275.1",
+}
+
+
+def _fetch_url(url: str) -> str:
+    """Fetch URL content using system curl (works around conda SSL issues)."""
+    result = subprocess.run(
+        ["/usr/bin/curl", "-s", url],
+        capture_output=True, text=True, check=True,
+    )
+    return result.stdout
+
+
+def lookup_organism_names(accessions: list[str]) -> dict[str, str]:
+    """Query NCBI Entrez for organism names given GCA accessions.
+
+    Uses the NCBI Assembly database to look up organism names.
+    Returns a dict mapping accession -> organism name.
+    """
+    results = {}
+    base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+
+    for accession in accessions:
+        # Search Assembly database for this accession
+        term = urllib.parse.quote(f"{accession}[Assembly Accession]")
+        search_url = (
+            f"{base_url}/esearch.fcgi?"
+            f"db=assembly&term={term}&retmode=xml"
+        )
+        xml_text = _fetch_url(search_url)
+        tree = ET.fromstring(xml_text)
+        id_list = tree.findall(".//Id")
+        if not id_list:
+            print(f"  WARNING: No assembly found for {accession}")
+            continue
+
+        assembly_id = id_list[0].text
+
+        # Fetch assembly summary to get organism name
+        summary_url = (
+            f"{base_url}/esummary.fcgi?"
+            f"db=assembly&id={assembly_id}&retmode=xml"
+        )
+        xml_text = _fetch_url(summary_url)
+        tree = ET.fromstring(xml_text)
+
+        # Look for Organism element in the DocumentSummary
+        organism_elem = tree.find(".//Organism")
+        organism = organism_elem.text if organism_elem is not None else None
+
+        if organism:
+            results[accession] = organism
+            print(f"  {accession} -> {organism}")
+        else:
+            print(f"  WARNING: No organism name found for {accession}")
+
+        # Be polite to NCBI: rate limit
+        time.sleep(0.35)
+
+    return results
 
 
 def load_castelli_checkm(xlsx_path: Path) -> pd.DataFrame:
@@ -171,10 +250,27 @@ def main():
     our_results = add_our_checkm_taxa(our_df)
     print()
 
-    # Combine and save
+    # Combine results
     all_results = castelli_results + our_results
     df = pd.DataFrame(all_results)
     df = df.sort_values('tip_name')
+
+    # Build new_name column using NCBI organism names
+    all_accessions = list(TIP_TO_ACCESSION.values())
+    print("Looking up organism names from NCBI:")
+    organism_names = lookup_organism_names(all_accessions)
+    print()
+
+    def make_new_name(tip_name):
+        if tip_name == "s7_ctg000008c":
+            return "A. bicarinatus symbiont"
+        accession = TIP_TO_ACCESSION.get(tip_name)
+        if accession and accession in organism_names:
+            return f"{accession} {organism_names[accession]}"
+        # Genomes without NCBI accessions (Castelli-only)
+        return f"{tip_name} (Castelli et al, 2025)"
+
+    df['new_name'] = df['tip_name'].apply(make_new_name)
 
     print("=" * 60)
     print(f"Final results: {len(df)} taxa")

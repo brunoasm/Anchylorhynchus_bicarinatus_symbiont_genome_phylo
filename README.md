@@ -176,6 +176,8 @@ Compiles genome quality metrics (completeness, contamination, GC content, genome
 
 The two outgroup genomes were downloaded from NCBI and analyzed with CheckM `lineage_wf` to ensure comparability with the Castelli et al. data (which used CheckM, not CheckM2).
 
+The script also adds a `new_name` column for display in figures, with format `"GCA_XXXXXXX.1 organism_name"` for genomes with NCBI accessions (organism names are fetched from the NCBI Assembly database via Entrez), `"tip_name (Castelli et al, 2025)"` for genomes without NCBI accessions, and `"A. bicarinatus symbiont"` for our MAG. **Running this script requires internet access** to query NCBI.
+
 **Note on CheckM vs CheckM2:** CheckM uses lineage-specific marker genes with phylogenetic placement, while CheckM2 uses machine learning. Results are generally comparable but may differ for divergent lineages. This study uses CheckM2 for initial quality filtering (Step 04) but CheckM for the final comparative table to match Castelli et al.'s methodology.
 
 ## Conda environments
