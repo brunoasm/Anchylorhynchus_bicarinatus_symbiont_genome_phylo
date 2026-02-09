@@ -72,6 +72,28 @@ TIP_TO_ACCESSION = {
     "Thalassospira_profundimaris": "GCA_000300275.1",
 }
 
+# Host info for tips where NCBI BioSample doesn't have host data
+# Values are (host_species, host_family, source)
+HARDCODED_HOSTS = {
+    "s7_ctg000008c": ("Anchylorhynchus bicarinatus", "Curculionidae", "this_study"),
+    "Hepatincola_Av": ("Armadillidium vulgare", "Armadillidiidae", "Dittmer_et_al_2023"),
+    "Hepatincola_Pp": ("Porcellionides pruinosus", "Porcellionidae", "Dittmer_et_al_2023"),
+    "Hepatincola_Pdp": ("Porcellio dilatatus petiti", "Porcellionidae", "Dittmer_et_al_2023"),
+    "Tardigradibacter_bertolanii": ("Richtersius cf. coronifer", "Richtersiidae", "Castelli_et_al_2025"),
+}
+
+# Map NCBI BioSample host names to taxonomic families
+HOST_TO_FAMILY = {
+    "Labiotermes labralis": "Termitidae",
+    "abalone": "Haliotidae",
+    "Haliotis discus hannai": "Haliotidae",
+}
+
+# Special enrichment: BioSample says "abalone", Castelli et al. provide species ID
+BIOSAMPLE_HOST_ENRICHMENT = {
+    "abalone": ("Haliotis discus hannai", "NCBI_BioSample+Castelli_et_al_2025"),
+}
+
 
 def _fetch_url(url: str) -> str:
     """Fetch URL content using system curl (works around conda SSL issues)."""
@@ -82,13 +104,14 @@ def _fetch_url(url: str) -> str:
     return result.stdout
 
 
-def lookup_organism_names(accessions: list[str]) -> dict[str, str]:
-    """Query NCBI Entrez for organism names given GCA accessions.
+def lookup_organism_names(accessions: list[str]) -> tuple[dict[str, str], dict[str, str]]:
+    """Query NCBI Entrez for organism names and BioSample accessions.
 
-    Uses the NCBI Assembly database to look up organism names.
-    Returns a dict mapping accession -> organism name.
+    Uses the NCBI Assembly database to look up organism names and BioSample IDs.
+    Returns (organism_names, biosample_accns) dicts, both mapping accession -> value.
     """
-    results = {}
+    organism_names = {}
+    biosample_accns = {}
     base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 
     for accession in accessions:
@@ -107,7 +130,7 @@ def lookup_organism_names(accessions: list[str]) -> dict[str, str]:
 
         assembly_id = id_list[0].text
 
-        # Fetch assembly summary to get organism name
+        # Fetch assembly summary to get organism name and BioSample accession
         summary_url = (
             f"{base_url}/esummary.fcgi?"
             f"db=assembly&id={assembly_id}&retmode=xml"
@@ -120,10 +143,51 @@ def lookup_organism_names(accessions: list[str]) -> dict[str, str]:
         organism = organism_elem.text if organism_elem is not None else None
 
         if organism:
-            results[accession] = organism
+            organism_names[accession] = organism
             print(f"  {accession} -> {organism}")
         else:
             print(f"  WARNING: No organism name found for {accession}")
+
+        # Look for BioSampleAccn element
+        biosample_elem = tree.find(".//BioSampleAccn")
+        if biosample_elem is not None and biosample_elem.text:
+            biosample_accns[accession] = biosample_elem.text
+            print(f"    BioSample: {biosample_elem.text}")
+
+        # Be polite to NCBI: rate limit
+        time.sleep(0.35)
+
+    return organism_names, biosample_accns
+
+
+def lookup_biosample_hosts(biosample_accns: dict[str, str]) -> dict[str, str]:
+    """Fetch host attribute from NCBI BioSample for each accession.
+
+    Takes dict of assembly_accession -> biosample_accession.
+    Returns dict of assembly_accession -> host_name.
+    """
+    results = {}
+    base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+
+    for assembly_acc, biosample_acc in biosample_accns.items():
+        # Fetch BioSample XML
+        fetch_url = (
+            f"{base_url}/efetch.fcgi?"
+            f"db=biosample&id={biosample_acc}&retmode=xml"
+        )
+        xml_text = _fetch_url(fetch_url)
+        tree = ET.fromstring(xml_text)
+
+        # Look for host attribute
+        for attr in tree.findall(".//Attribute"):
+            if attr.get("attribute_name") == "host" or attr.get("harmonized_name") == "host":
+                host = attr.text
+                if host and host.lower() not in ("not applicable", "missing", "not collected"):
+                    results[assembly_acc] = host
+                    print(f"  {assembly_acc} ({biosample_acc}) -> host: {host}")
+                break
+        else:
+            print(f"  {assembly_acc} ({biosample_acc}) -> no host attribute")
 
         # Be polite to NCBI: rate limit
         time.sleep(0.35)
@@ -258,7 +322,7 @@ def main():
     # Build new_name column using NCBI organism names
     all_accessions = list(TIP_TO_ACCESSION.values())
     print("Looking up organism names from NCBI:")
-    organism_names = lookup_organism_names(all_accessions)
+    organism_names, biosample_accns = lookup_organism_names(all_accessions)
     print()
 
     def make_new_name(tip_name):
@@ -271,6 +335,40 @@ def main():
         return f"{tip_name} (Castelli et al, 2025)"
 
     df['new_name'] = df['tip_name'].apply(make_new_name)
+
+    # Build host metadata columns
+    print("Looking up host info from NCBI BioSample:")
+    biosample_hosts = lookup_biosample_hosts(biosample_accns)
+    print()
+
+    # Build accession -> tip_name reverse mapping
+    acc_to_tip = {v: k for k, v in TIP_TO_ACCESSION.items()}
+
+    def resolve_host(tip_name):
+        """Resolve host_species, host_family, host_source for a tip."""
+        # Check hardcoded hosts first (no NCBI data available)
+        if tip_name in HARDCODED_HOSTS:
+            return HARDCODED_HOSTS[tip_name]
+
+        # Check NCBI BioSample
+        accession = TIP_TO_ACCESSION.get(tip_name)
+        if accession and accession in biosample_hosts:
+            host = biosample_hosts[accession]
+            # Apply enrichment if available (e.g., "abalone" -> full species)
+            if host in BIOSAMPLE_HOST_ENRICHMENT:
+                enriched_species, source = BIOSAMPLE_HOST_ENRICHMENT[host]
+                family = HOST_TO_FAMILY.get(host, "NA")
+                return (enriched_species, family, source)
+            family = HOST_TO_FAMILY.get(host, "NA")
+            return (host, family, "NCBI_BioSample")
+
+        # Not a symbiont (or no host data found)
+        return ("NA", "NA", "NA")
+
+    host_data = df['tip_name'].apply(resolve_host)
+    df['host_species'] = host_data.apply(lambda x: x[0])
+    df['host_family'] = host_data.apply(lambda x: x[1])
+    df['host_source'] = host_data.apply(lambda x: x[2])
 
     print("=" * 60)
     print(f"Final results: {len(df)} taxa")

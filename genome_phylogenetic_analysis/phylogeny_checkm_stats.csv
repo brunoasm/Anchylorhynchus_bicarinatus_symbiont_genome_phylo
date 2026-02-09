@@ -1,19 +1,19 @@
-tip_name,completeness,contamination,gc_content,genome_size,n_contigs,data_source,new_name
-Hepatincola_Av,98.9010989010989,0.0,0.2952757374060198,1340442,1,Castelli_et_al_2025_CheckM,"Hepatincola_Av (Castelli et al, 2025)"
-Hepatincola_Pdp,90.10989010989012,1.098901098901099,0.2942547227974512,1229614,16,Castelli_et_al_2025_CheckM,"Hepatincola_Pdp (Castelli et al, 2025)"
-Hepatincola_Pp,97.8021978021978,1.098901098901099,0.3064527182250742,1284110,1,Castelli_et_al_2025_CheckM,"Hepatincola_Pp (Castelli et al, 2025)"
-Marine_MAG_001510075,75.87064676616916,0.0,0.5816752558849735,1772183,84,Castelli_et_al_2025_CheckM,GCA_001510075.1 Alphaproteobacteria bacterium casp-alpha2 (a-proteobacteria)
-Marine_MAG_001830425,97.59158751696066,0.2487562189054726,0.5824686320424356,2729753,130,Castelli_et_al_2025_CheckM,GCA_001830425.1 Rhodospirillales bacterium RIFCSPLOWO2_02_FULL_58_16 (a-proteobacteria)
-Marine_MAG_002327565,91.27855346921308,5.223880597014926,0.5058398532721387,4397465,311,Castelli_et_al_2025_CheckM,GCA_002327565.1 Rhodospirillaceae bacterium UBA2165 (a-proteobacteria)
-Marine_MAG_002687515,85.24046434494197,4.127091813658978,0.601882795051304,4285735,181,Castelli_et_al_2025_CheckM,GCA_002687515.1 Rhodospirillaceae bacterium (a-proteobacteria)
-Marine_MAG_009694195,62.18905472636816,0.0,0.6567093452735492,2504924,49,Castelli_et_al_2025_CheckM,GCA_009694195.1 Rhodospirillales bacterium (a-proteobacteria)
-Marine_MAG_013204045,92.74084124830394,0.6218905472636815,0.5702778743434311,2683839,177,Castelli_et_al_2025_CheckM,GCA_013204045.1 Rhodospirillaceae bacterium (a-proteobacteria)
-Marine_MAG_014859895,97.10820895522389,3.316749585406302,0.6523752642419909,5096654,197,Castelli_et_al_2025_CheckM,GCA_014859895.1 Rhodospirillales bacterium (a-proteobacteria)
-Marine_MAG_018662225,98.0099502487562,0.4145936981757877,0.5345526968279135,3499148,103,Castelli_et_al_2025_CheckM,GCA_018662225.1 Rhodospirillales bacterium (a-proteobacteria)
-Outgroup_009649675,100.0,0.4975124378109453,0.5759888341608846,4423878,23,Castelli_et_al_2025_CheckM,GCA_009649675.1 Alphaproteobacteria bacterium HT1-32 (a-proteobacteria)
-Symbiont_of_Haliotis,89.35323383084577,2.36318407960199,0.3555008960499031,2046227,19,Castelli_et_al_2025_CheckM,GCA_002632265.1 Rhodospirillaceae bacterium MC! (a-proteobacteria)
-Symbiont_of_L_labralis,98.9247311827957,0.0,0.3356205177174753,1422127,17,Castelli_et_al_2025_CheckM,GCA_009780035.1 Alphaproteobacteria bacterium (a-proteobacteria)
-Tardigradibacter_bertolanii,98.9247311827957,0.0,0.3025300515856161,1332542,15,Castelli_et_al_2025_CheckM,"Tardigradibacter_bertolanii (Castelli et al, 2025)"
-Terasakiella_pusilla_DSM_6293,100.0,0.75,0.5,4053560,85,this_study_CheckM,GCA_000688235.1 Terasakiella pusilla DSM 6293 (a-proteobacteria)
-Thalassospira_profundimaris,100.0,0.0,0.552,4380232,28,this_study_CheckM,GCA_000300275.1 Thalassospira profundimaris WP0211 (a-proteobacteria)
-s7_ctg000008c,97.85,0.0,0.29,1231242,1,this_study_CheckM,A. bicarinatus symbiont
+tip_name,completeness,contamination,gc_content,genome_size,n_contigs,data_source,new_name,host_species,host_family,host_source
+Hepatincola_Av,98.9010989010989,0.0,0.2952757374060198,1340442,1,Castelli_et_al_2025_CheckM,"Hepatincola_Av (Castelli et al, 2025)",Armadillidium vulgare,Armadillidiidae,Dittmer_et_al_2023
+Hepatincola_Pdp,90.10989010989012,1.098901098901099,0.2942547227974512,1229614,16,Castelli_et_al_2025_CheckM,"Hepatincola_Pdp (Castelli et al, 2025)",Porcellio dilatatus petiti,Porcellionidae,Dittmer_et_al_2023
+Hepatincola_Pp,97.8021978021978,1.098901098901099,0.3064527182250742,1284110,1,Castelli_et_al_2025_CheckM,"Hepatincola_Pp (Castelli et al, 2025)",Porcellionides pruinosus,Porcellionidae,Dittmer_et_al_2023
+Marine_MAG_001510075,75.87064676616916,0.0,0.5816752558849735,1772183,84,Castelli_et_al_2025_CheckM,GCA_001510075.1 Alphaproteobacteria bacterium casp-alpha2 (a-proteobacteria),NA,NA,NA
+Marine_MAG_001830425,97.59158751696066,0.2487562189054726,0.5824686320424356,2729753,130,Castelli_et_al_2025_CheckM,GCA_001830425.1 Rhodospirillales bacterium RIFCSPLOWO2_02_FULL_58_16 (a-proteobacteria),NA,NA,NA
+Marine_MAG_002327565,91.27855346921308,5.223880597014926,0.5058398532721387,4397465,311,Castelli_et_al_2025_CheckM,GCA_002327565.1 Rhodospirillaceae bacterium UBA2165 (a-proteobacteria),NA,NA,NA
+Marine_MAG_002687515,85.24046434494197,4.127091813658978,0.601882795051304,4285735,181,Castelli_et_al_2025_CheckM,GCA_002687515.1 Rhodospirillaceae bacterium (a-proteobacteria),NA,NA,NA
+Marine_MAG_009694195,62.18905472636816,0.0,0.6567093452735492,2504924,49,Castelli_et_al_2025_CheckM,GCA_009694195.1 Rhodospirillales bacterium (a-proteobacteria),NA,NA,NA
+Marine_MAG_013204045,92.74084124830394,0.6218905472636815,0.5702778743434311,2683839,177,Castelli_et_al_2025_CheckM,GCA_013204045.1 Rhodospirillaceae bacterium (a-proteobacteria),NA,NA,NA
+Marine_MAG_014859895,97.10820895522389,3.316749585406302,0.6523752642419909,5096654,197,Castelli_et_al_2025_CheckM,GCA_014859895.1 Rhodospirillales bacterium (a-proteobacteria),NA,NA,NA
+Marine_MAG_018662225,98.0099502487562,0.4145936981757877,0.5345526968279135,3499148,103,Castelli_et_al_2025_CheckM,GCA_018662225.1 Rhodospirillales bacterium (a-proteobacteria),NA,NA,NA
+Outgroup_009649675,100.0,0.4975124378109453,0.5759888341608846,4423878,23,Castelli_et_al_2025_CheckM,GCA_009649675.1 Alphaproteobacteria bacterium HT1-32 (a-proteobacteria),NA,NA,NA
+Symbiont_of_Haliotis,89.35323383084577,2.36318407960199,0.3555008960499031,2046227,19,Castelli_et_al_2025_CheckM,GCA_002632265.1 Rhodospirillaceae bacterium MC! (a-proteobacteria),Haliotis discus hannai,Haliotidae,NCBI_BioSample+Castelli_et_al_2025
+Symbiont_of_L_labralis,98.9247311827957,0.0,0.3356205177174753,1422127,17,Castelli_et_al_2025_CheckM,GCA_009780035.1 Alphaproteobacteria bacterium (a-proteobacteria),Labiotermes labralis,Termitidae,NCBI_BioSample
+Tardigradibacter_bertolanii,98.9247311827957,0.0,0.3025300515856161,1332542,15,Castelli_et_al_2025_CheckM,"Tardigradibacter_bertolanii (Castelli et al, 2025)",Richtersius cf. coronifer,Richtersiidae,Castelli_et_al_2025
+Terasakiella_pusilla_DSM_6293,100.0,0.75,0.5,4053560,85,this_study_CheckM,GCA_000688235.1 Terasakiella pusilla DSM 6293 (a-proteobacteria),NA,NA,NA
+Thalassospira_profundimaris,100.0,0.0,0.552,4380232,28,this_study_CheckM,GCA_000300275.1 Thalassospira profundimaris WP0211 (a-proteobacteria),NA,NA,NA
+s7_ctg000008c,97.85,0.0,0.29,1231242,1,this_study_CheckM,A. bicarinatus symbiont,Anchylorhynchus bicarinatus,Curculionidae,this_study
