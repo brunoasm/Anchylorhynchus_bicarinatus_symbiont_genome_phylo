@@ -160,6 +160,23 @@ All output is written to `genome_phylogenetic_analysis/`:
 | `genome_tree.treefile` | Maximum-likelihood tree (Newick format) |
 | `genome_tree.iqtree` | IQ-TREE report |
 | `REPORT.md` | Summary report |
+| `phylogeny_checkm_stats.csv` | CheckM statistics for all phylogeny tips (see below) |
+
+### CheckM statistics for phylogeny tips
+
+**Script:** `merge_checkm_stats.py`
+
+Compiles genome quality metrics (completeness, contamination, GC content, genome size) for all 18 taxa in the phylogenetic tree. Data are drawn from two sources:
+
+1. **Castelli et al. (2025)** -- CheckM results from Supplementary Table 7 for 15 taxa
+2. **This study** -- CheckM (v1.2.4) run on 3 additional genomes:
+   - `s7_ctg000008c` (our MAG)
+   - `Terasakiella_pusilla_DSM_6293` (GCA_000688235.1)
+   - `Thalassospira_profundimaris` (GCA_000300275.1)
+
+The two outgroup genomes were downloaded from NCBI and analyzed with CheckM `lineage_wf` to ensure comparability with the Castelli et al. data (which used CheckM, not CheckM2).
+
+**Note on CheckM vs CheckM2:** CheckM uses lineage-specific marker genes with phylogenetic placement, while CheckM2 uses machine learning. Results are generally comparable but may differ for divergent lineages. This study uses CheckM2 for initial quality filtering (Step 04) but CheckM for the final comparative table to match Castelli et al.'s methodology.
 
 ## Conda environments
 
@@ -169,6 +186,7 @@ The pipeline uses three conda environments:
 |-------------|---------|-----------------|-------|
 | `gtdbtk-2.1.1` | 02 | (pre-existing) | Must be created manually before running step 02 |
 | `checkm2` | 04 | (created by script) | Created automatically by `04_run_checkm2.sh` |
+| `checkm` | merge_checkm_stats.py | (created manually) | For comparable CheckM stats; see above |
 | `symbiont_phylo` | 01, 03, 05, 06 | `symbiont_phylo_env.yml` | Created automatically if absent |
 
 ## Reproducibility
@@ -185,7 +203,8 @@ Scripts were developed with the assistance of Claude Code (Anthropic).
 | Software | Version | Purpose |
 |----------|---------|---------|
 | GTDB-Tk | 2.1.1 | Taxonomic classification |
-| CheckM2 | (via conda) | Genome quality assessment |
+| CheckM | 1.2.4 | Genome quality assessment (for cross-study comparison) |
+| CheckM2 | (via conda) | Genome quality assessment (for initial filtering) |
 | minimap2 | >= 2.26 | Read mapping (PacBio HiFi) |
 | samtools | >= 1.17 | BAM processing and coverage |
 | eggNOG-mapper | >= 2.1 | Functional annotation and OG assignment |

@@ -30,8 +30,9 @@ __pycache__/
 eggnog_data/
 castelli_et_al/
 
-# Pipeline outputs (step 07)
-genome_phylogenetic_analysis/
+# Pipeline outputs (step 06) — keep only the final CheckM stats CSV
+genome_phylogenetic_analysis/*
+!genome_phylogenetic_analysis/phylogeny_checkm_stats.csv
 
 # Accessory documentation
 CODE_CHANGES_SUMMARY.md
