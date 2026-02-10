@@ -18,6 +18,7 @@ Usage:
 """
 
 import argparse
+import json
 import subprocess
 import sys
 import time
@@ -87,6 +88,8 @@ HOST_TO_FAMILY = {
     "Labiotermes labralis": "Termitidae",
     "abalone": "Haliotidae",
     "Haliotis discus hannai": "Haliotidae",
+    "Cornitermes pugnax": "Termitidae",
+    "Jugositermes tuberculatus": "Termitidae",
 }
 
 # Special enrichment: BioSample says "abalone", Castelli et al. provide species ID
@@ -95,12 +98,19 @@ BIOSAMPLE_HOST_ENRICHMENT = {
 }
 
 
-def _fetch_url(url: str) -> str:
+def _fetch_url(url: str, retries: int = 3) -> str:
     """Fetch URL content using system curl (works around conda SSL issues)."""
-    result = subprocess.run(
-        ["/usr/bin/curl", "-s", url],
-        capture_output=True, text=True, check=True,
-    )
+    for attempt in range(retries):
+        result = subprocess.run(
+            ["/usr/bin/curl", "-s", "-L", url],
+            capture_output=True, text=True, check=True,
+        )
+        text = result.stdout
+        # Retry on empty or HTML error responses (NCBI rate limiting)
+        if text.strip() and not text.strip().startswith("<!"):
+            return text
+        if attempt < retries - 1:
+            time.sleep(1 + attempt * 2)
     return result.stdout
 
 
@@ -115,47 +125,61 @@ def lookup_organism_names(accessions: list[str]) -> tuple[dict[str, str], dict[s
     base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 
     for accession in accessions:
-        # Search Assembly database for this accession
-        term = urllib.parse.quote(f"{accession}[Assembly Accession]")
-        search_url = (
-            f"{base_url}/esearch.fcgi?"
-            f"db=assembly&term={term}&retmode=xml"
-        )
-        xml_text = _fetch_url(search_url)
-        tree = ET.fromstring(xml_text)
-        id_list = tree.findall(".//Id")
-        if not id_list:
-            print(f"  WARNING: No assembly found for {accession}")
-            continue
+        try:
+            # Search Assembly database for this accession
+            term = urllib.parse.quote(f"{accession}[Assembly Accession]")
+            search_url = (
+                f"{base_url}/esearch.fcgi?"
+                f"db=assembly&term={term}&retmode=xml"
+            )
+            xml_text = _fetch_url(search_url)
+            try:
+                tree = ET.fromstring(xml_text)
+            except ET.ParseError:
+                print(f"  WARNING: Bad XML response for {accession} (search), skipping")
+                time.sleep(2)
+                continue
+            id_list = tree.findall(".//Id")
+            if not id_list:
+                print(f"  WARNING: No assembly found for {accession}")
+                continue
 
-        assembly_id = id_list[0].text
+            assembly_id = id_list[0].text
 
-        # Fetch assembly summary to get organism name and BioSample accession
-        summary_url = (
-            f"{base_url}/esummary.fcgi?"
-            f"db=assembly&id={assembly_id}&retmode=xml"
-        )
-        xml_text = _fetch_url(summary_url)
-        tree = ET.fromstring(xml_text)
+            # Fetch assembly summary to get organism name and BioSample accession
+            summary_url = (
+                f"{base_url}/esummary.fcgi?"
+                f"db=assembly&id={assembly_id}&retmode=xml"
+            )
+            xml_text = _fetch_url(summary_url)
+            try:
+                tree = ET.fromstring(xml_text)
+            except ET.ParseError:
+                print(f"  WARNING: Bad XML response for {accession} (summary), skipping")
+                time.sleep(2)
+                continue
 
-        # Look for Organism element in the DocumentSummary
-        organism_elem = tree.find(".//Organism")
-        organism = organism_elem.text if organism_elem is not None else None
+            # Look for Organism element in the DocumentSummary
+            organism_elem = tree.find(".//Organism")
+            organism = organism_elem.text if organism_elem is not None else None
 
-        if organism:
-            organism_names[accession] = organism
-            print(f"  {accession} -> {organism}")
-        else:
-            print(f"  WARNING: No organism name found for {accession}")
+            if organism:
+                organism_names[accession] = organism
+                print(f"  {accession} -> {organism}")
+            else:
+                print(f"  WARNING: No organism name found for {accession}")
 
-        # Look for BioSampleAccn element
-        biosample_elem = tree.find(".//BioSampleAccn")
-        if biosample_elem is not None and biosample_elem.text:
-            biosample_accns[accession] = biosample_elem.text
-            print(f"    BioSample: {biosample_elem.text}")
+            # Look for BioSampleAccn element
+            biosample_elem = tree.find(".//BioSampleAccn")
+            if biosample_elem is not None and biosample_elem.text:
+                biosample_accns[accession] = biosample_elem.text
+                print(f"    BioSample: {biosample_elem.text}")
+
+        except Exception as e:
+            print(f"  WARNING: Error looking up {accession}: {e}")
 
         # Be polite to NCBI: rate limit
-        time.sleep(0.35)
+        time.sleep(0.5)
 
     return organism_names, biosample_accns
 
@@ -170,27 +194,35 @@ def lookup_biosample_hosts(biosample_accns: dict[str, str]) -> dict[str, str]:
     base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 
     for assembly_acc, biosample_acc in biosample_accns.items():
-        # Fetch BioSample XML
-        fetch_url = (
-            f"{base_url}/efetch.fcgi?"
-            f"db=biosample&id={biosample_acc}&retmode=xml"
-        )
-        xml_text = _fetch_url(fetch_url)
-        tree = ET.fromstring(xml_text)
+        try:
+            # Fetch BioSample XML
+            fetch_url = (
+                f"{base_url}/efetch.fcgi?"
+                f"db=biosample&id={biosample_acc}&retmode=xml"
+            )
+            xml_text = _fetch_url(fetch_url)
+            try:
+                tree = ET.fromstring(xml_text)
+            except ET.ParseError:
+                print(f"  {assembly_acc} ({biosample_acc}) -> bad XML response, skipping")
+                time.sleep(2)
+                continue
 
-        # Look for host attribute
-        for attr in tree.findall(".//Attribute"):
-            if attr.get("attribute_name") == "host" or attr.get("harmonized_name") == "host":
-                host = attr.text
-                if host and host.lower() not in ("not applicable", "missing", "not collected"):
-                    results[assembly_acc] = host
-                    print(f"  {assembly_acc} ({biosample_acc}) -> host: {host}")
-                break
-        else:
-            print(f"  {assembly_acc} ({biosample_acc}) -> no host attribute")
+            # Look for host attribute
+            for attr in tree.findall(".//Attribute"):
+                if attr.get("attribute_name") == "host" or attr.get("harmonized_name") == "host":
+                    host = attr.text
+                    if host and host.lower() not in ("not applicable", "missing", "not collected"):
+                        results[assembly_acc] = host
+                        print(f"  {assembly_acc} ({biosample_acc}) -> host: {host}")
+                    break
+            else:
+                print(f"  {assembly_acc} ({biosample_acc}) -> no host attribute")
+        except Exception as e:
+            print(f"  {assembly_acc} ({biosample_acc}) -> error: {e}")
 
         # Be polite to NCBI: rate limit
-        time.sleep(0.35)
+        time.sleep(0.5)
 
     return results
 
@@ -262,6 +294,52 @@ def add_our_checkm_taxa(our_df: pd.DataFrame) -> list[dict]:
     return results
 
 
+def load_gtdb_manifest(manifest_path: Path) -> list[dict]:
+    """Load CheckM stats and metadata from a GTDB genome manifest.
+
+    Returns a list of dicts with the same fields as match_castelli_taxa output,
+    plus extra metadata for host resolution.
+    """
+    with open(manifest_path) as fh:
+        manifest = json.load(fh)
+
+    results = []
+    for genome in manifest["genomes"]:
+        if genome["status"] != "new":
+            continue
+
+        tip_name = genome.get("tip_name")
+        if not tip_name:
+            continue
+
+        results.append({
+            'tip_name': tip_name,
+            'completeness': genome.get("checkm_completeness"),
+            'contamination': genome.get("checkm_contamination"),
+            'gc_content': genome.get("gc_content"),
+            'genome_size': genome.get("genome_size"),
+            'n_contigs': genome.get("n_contigs"),
+            'data_source': 'this_study_CheckM',
+        })
+        print(f"  {tip_name} ({genome['accession']})")
+
+    return results, manifest
+
+
+def _parse_host_from_organism(organism: str) -> str | None:
+    """Extract host species from organism name like 'endosymbiont of Pipizella viduata'."""
+    if not organism:
+        return None
+    lower = organism.lower()
+    if "endosymbiont of" in lower:
+        host = organism.split("endosymbiont of")[-1].strip()
+        # Clean up asterisks, quotes, etc.
+        host = host.strip("*\"' ")
+        if host and host.lower() not in ("", "not applicable", "missing"):
+            return host
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Merge CheckM statistics for phylogeny tip taxa"
@@ -283,6 +361,12 @@ def main():
         type=Path,
         default=Path("genome_phylogenetic_analysis/phylogeny_checkm_stats.csv"),
         help="Output CSV path"
+    )
+    parser.add_argument(
+        "--gtdb-manifest",
+        type=Path,
+        default=None,
+        help="Path to GTDB genome_manifest.json for enrichment genomes"
     )
 
     args = parser.parse_args()
@@ -316,11 +400,36 @@ def main():
 
     # Combine results
     all_results = castelli_results + our_results
+
+    # Load GTDB manifest if provided
+    gtdb_manifest = None
+    gtdb_tip_accessions = {}  # tip_name -> accession for GTDB genomes
+    gtdb_tip_organisms = {}   # tip_name -> ncbi_organism
+    gtdb_tip_biosamples = {}  # tip_name -> biosample_accn
+    if args.gtdb_manifest and args.gtdb_manifest.exists():
+        print("Adding GTDB enrichment genomes:")
+        gtdb_results, gtdb_manifest = load_gtdb_manifest(args.gtdb_manifest)
+        all_results.extend(gtdb_results)
+
+        # Build lookup dicts for GTDB genomes
+        for genome in gtdb_manifest["genomes"]:
+            if genome["status"] == "new" and genome.get("tip_name"):
+                tip = genome["tip_name"]
+                gtdb_tip_accessions[tip] = genome["accession"]
+                gtdb_tip_organisms[tip] = genome.get("ncbi_organism", "")
+                if genome.get("biosample_accn"):
+                    gtdb_tip_biosamples[tip] = genome["biosample_accn"]
+        print()
+
+    # Merge TIP_TO_ACCESSION with GTDB genomes for NCBI lookups
+    all_tip_to_accession = dict(TIP_TO_ACCESSION)
+    all_tip_to_accession.update(gtdb_tip_accessions)
+
     df = pd.DataFrame(all_results)
     df = df.sort_values('tip_name')
 
     # Build new_name column using NCBI organism names
-    all_accessions = list(TIP_TO_ACCESSION.values())
+    all_accessions = list(all_tip_to_accession.values())
     print("Looking up organism names from NCBI:")
     organism_names, biosample_accns = lookup_organism_names(all_accessions)
     print()
@@ -328,7 +437,7 @@ def main():
     def make_new_name(tip_name):
         if tip_name == "s7_ctg000008c":
             return "A. bicarinatus symbiont"
-        accession = TIP_TO_ACCESSION.get(tip_name)
+        accession = all_tip_to_accession.get(tip_name)
         if accession and accession in organism_names:
             return f"{accession} {organism_names[accession]}"
         # Genomes without NCBI accessions (Castelli-only)
@@ -337,12 +446,21 @@ def main():
     df['new_name'] = df['tip_name'].apply(make_new_name)
 
     # Build host metadata columns
+    # Merge GTDB BioSample accessions into the lookup
+    for tip, bs in gtdb_tip_biosamples.items():
+        acc = gtdb_tip_accessions.get(tip)
+        if acc and acc not in biosample_accns:
+            biosample_accns[acc] = bs
+
     print("Looking up host info from NCBI BioSample:")
     biosample_hosts = lookup_biosample_hosts(biosample_accns)
     print()
 
-    # Build accession -> tip_name reverse mapping
-    acc_to_tip = {v: k for k, v in TIP_TO_ACCESSION.items()}
+    # Host family mappings for GTDB symbiont genomes
+    gtdb_host_families = {
+        "Pipizella viduata": "Syrphidae",
+        "Ecdyonurus torrentis": "Heptageniidae",
+    }
 
     def resolve_host(tip_name):
         """Resolve host_species, host_family, host_source for a tip."""
@@ -350,8 +468,9 @@ def main():
         if tip_name in HARDCODED_HOSTS:
             return HARDCODED_HOSTS[tip_name]
 
+        accession = all_tip_to_accession.get(tip_name)
+
         # Check NCBI BioSample
-        accession = TIP_TO_ACCESSION.get(tip_name)
         if accession and accession in biosample_hosts:
             host = biosample_hosts[accession]
             # Apply enrichment if available (e.g., "abalone" -> full species)
@@ -359,8 +478,16 @@ def main():
                 enriched_species, source = BIOSAMPLE_HOST_ENRICHMENT[host]
                 family = HOST_TO_FAMILY.get(host, "NA")
                 return (enriched_species, family, source)
-            family = HOST_TO_FAMILY.get(host, "NA")
+            family = HOST_TO_FAMILY.get(host, gtdb_host_families.get(host, "NA"))
             return (host, family, "NCBI_BioSample")
+
+        # For GTDB genomes: try parsing host from organism name
+        if tip_name in gtdb_tip_organisms:
+            organism = gtdb_tip_organisms[tip_name]
+            host = _parse_host_from_organism(organism)
+            if host:
+                family = gtdb_host_families.get(host, HOST_TO_FAMILY.get(host, "NA"))
+                return (host, family, "GTDB_organism_name")
 
         # Not a symbiont (or no host data found)
         return ("NA", "NA", "NA")

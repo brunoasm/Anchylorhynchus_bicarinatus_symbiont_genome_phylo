@@ -30,9 +30,17 @@ __pycache__/
 eggnog_data/
 castelli_et_al/
 
-# Pipeline outputs (step 06) — keep only the final CheckM stats CSV
+# Pipeline outputs (step 06/07) — keep key result files
 genome_phylogenetic_analysis/*
 !genome_phylogenetic_analysis/phylogeny_checkm_stats.csv
+!genome_phylogenetic_analysis/REPORT.md
+
+# GTDB enrichment data (step 07) — keep manifest and CheckM results
+gtdb_genomes/*
+!gtdb_genomes/genome_manifest.json
+!gtdb_genomes/checkm_output/
+gtdb_genomes/checkm_output/*
+!gtdb_genomes/checkm_output/quality_report.tsv
 
 # Accessory documentation
 CODE_CHANGES_SUMMARY.md

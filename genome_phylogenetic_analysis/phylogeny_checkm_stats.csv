@@ -11,9 +11,15 @@ Marine_MAG_013204045,92.74084124830394,0.6218905472636815,0.5702778743434311,268
 Marine_MAG_014859895,97.10820895522389,3.316749585406302,0.6523752642419909,5096654,197,Castelli_et_al_2025_CheckM,GCA_014859895.1 Rhodospirillales bacterium (a-proteobacteria),NA,NA,NA
 Marine_MAG_018662225,98.0099502487562,0.4145936981757877,0.5345526968279135,3499148,103,Castelli_et_al_2025_CheckM,GCA_018662225.1 Rhodospirillales bacterium (a-proteobacteria),NA,NA,NA
 Outgroup_009649675,100.0,0.4975124378109453,0.5759888341608846,4423878,23,Castelli_et_al_2025_CheckM,GCA_009649675.1 Alphaproteobacteria bacterium HT1-32 (a-proteobacteria),NA,NA,NA
+Symbiont_of_E_torrentis,98.9,0.0,0.312,1383406,1,this_study_CheckM,GCA_964020105.1 Rickettsiales endosymbiont of Ecdyonurus torrentis (a-proteobacteria),Ecdyonurus torrentis,Heptageniidae,GTDB_organism_name
 Symbiont_of_Haliotis,89.35323383084577,2.36318407960199,0.3555008960499031,2046227,19,Castelli_et_al_2025_CheckM,GCA_002632265.1 Rhodospirillaceae bacterium MC! (a-proteobacteria),Haliotis discus hannai,Haliotidae,NCBI_BioSample+Castelli_et_al_2025
 Symbiont_of_L_labralis,98.9247311827957,0.0,0.3356205177174753,1422127,17,Castelli_et_al_2025_CheckM,GCA_009780035.1 Alphaproteobacteria bacterium (a-proteobacteria),Labiotermes labralis,Termitidae,NCBI_BioSample
+Symbiont_of_P_viduata,97.8,0.0,0.268,1105045,1,this_study_CheckM,GCA_964020055.1 Alphaproteobacteria bacterium endosymbiont of Pipizella viduata (a-proteobacteria),Pipizella viduata,Syrphidae,GTDB_organism_name
 Tardigradibacter_bertolanii,98.9247311827957,0.0,0.3025300515856161,1332542,15,Castelli_et_al_2025_CheckM,"Tardigradibacter_bertolanii (Castelli et al, 2025)",Richtersius cf. coronifer,Richtersiidae,Castelli_et_al_2025
 Terasakiella_pusilla_DSM_6293,100.0,0.75,0.5,4053560,85,this_study_CheckM,GCA_000688235.1 Terasakiella pusilla DSM 6293 (a-proteobacteria),NA,NA,NA
 Thalassospira_profundimaris,100.0,0.0,0.552,4380232,28,this_study_CheckM,GCA_000300275.1 Thalassospira profundimaris WP0211 (a-proteobacteria),NA,NA,NA
+WRAU01_MAG_031256515,98.12,0.0,0.294,1487858,104,this_study_CheckM,GCA_031256515.1 Alphaproteobacteria bacterium (a-proteobacteria),Cornitermes pugnax,Termitidae,NCBI_BioSample
+WRAU01_MAG_031274895,97.31,0.0,0.36,1499021,137,this_study_CheckM,GCA_031274895.1 Alphaproteobacteria bacterium (a-proteobacteria),Jugositermes tuberculatus,Termitidae,NCBI_BioSample
+WRAU01_MAG_945888065,86.81,0.0,0.254,867558,26,this_study_CheckM,GCA_945888065.1 Rickettsia typhi (a-proteobacteria),NA,NA,NA
+WRAU01_MAG_947460385,88.71,1.61,0.29600000000000004,1093185,66,this_study_CheckM,GCA_947460385.1 Alphaproteobacteria bacterium (a-proteobacteria),NA,NA,NA
 s7_ctg000008c,97.85,0.0,0.29,1231242,1,this_study_CheckM,A. bicarinatus symbiont,Anchylorhynchus bicarinatus,Curculionidae,this_study

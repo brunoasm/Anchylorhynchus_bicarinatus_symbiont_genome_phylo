@@ -13,6 +13,7 @@ Subcommands:
 """
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -179,16 +180,77 @@ def _write_fasta(records: dict[str, str], path: str) -> None:
                 fh.write(seq[i:i + 80] + "\n")
 
 
+def _load_extra_genomes(manifest_path: str) -> list[dict]:
+    """Load extra genome data from a GTDB manifest JSON.
+
+    Returns a list of dicts with keys: tip_name, proteins (dict), og_entries (list).
+    """
+    with open(manifest_path) as fh:
+        manifest = json.load(fh)
+
+    extras = []
+    for genome in manifest["genomes"]:
+        if genome["status"] != "new":
+            continue
+        tip_name = genome.get("tip_name")
+        protein_path = genome.get("protein_fasta")
+        og_mapping_path = genome.get("og_mapping")
+
+        if not tip_name or not protein_path or not og_mapping_path:
+            print(f"  Skipping {genome['accession']}: missing data")
+            continue
+
+        if not os.path.exists(protein_path) or not os.path.exists(og_mapping_path):
+            print(f"  Skipping {genome['accession']}: files not found")
+            continue
+
+        proteins = _read_fasta_dict(protein_path)
+
+        og_entries = []
+        with open(og_mapping_path) as fh:
+            fh.readline()  # skip header
+            for line in fh:
+                fields = line.rstrip("\n").split("\t")
+                if len(fields) >= 3:
+                    og_entries.append({
+                        "protein_id": fields[0],
+                        "og_id": fields[1],
+                        "castelli_file": fields[2],
+                    })
+
+        extras.append({
+            "tip_name": tip_name,
+            "proteins": proteins,
+            "og_entries": og_entries,
+            "og_lookup": {e["og_id"]: e for e in og_entries},
+        })
+        print(f"  Loaded extra genome: {tip_name} ({len(proteins)} proteins, {len(og_entries)} OGs)")
+
+    return extras
+
+
 def extract_and_align(og_mapping: str, castelli_og_dir: str, protein_file: str,
-                      output_dir: str, threads: int = 4) -> None:
-    """For each mapped OG: extract target taxa, add new MAG protein, align."""
+                      output_dir: str, threads: int = 4,
+                      extra_genomes_manifest: str | None = None) -> None:
+    """For each mapped OG: extract target taxa, add new MAG protein, align.
+
+    If extra_genomes_manifest is provided, also adds proteins from GTDB genomes
+    listed in the manifest.
+    """
     os.makedirs(output_dir, exist_ok=True)
 
     # Read MAG proteins
     mag_proteins = _read_fasta_dict(protein_file)
     print(f"Loaded {len(mag_proteins)} proteins from MAG")
 
-    # Read OG mapping
+    # Load extra genomes if provided
+    extra_genomes = []
+    if extra_genomes_manifest:
+        print(f"\nLoading extra genomes from manifest:")
+        extra_genomes = _load_extra_genomes(extra_genomes_manifest)
+        print(f"  Total extra genomes: {len(extra_genomes)}\n")
+
+    # Read primary OG mapping
     og_entries = []
     with open(og_mapping) as fh:
         header = fh.readline()  # skip header
@@ -201,19 +263,36 @@ def extract_and_align(og_mapping: str, castelli_og_dir: str, protein_file: str,
                     "castelli_file": fields[2],
                 })
 
-    print(f"Processing {len(og_entries)} OGs...")
+    # Build union of all OG IDs (primary + extra genomes)
+    all_og_ids = {e["og_id"]: e["castelli_file"] for e in og_entries}
+    primary_og_lookup = {e["og_id"]: e for e in og_entries}
+
+    for extra in extra_genomes:
+        for e in extra["og_entries"]:
+            if e["og_id"] not in all_og_ids:
+                all_og_ids[e["og_id"]] = e["castelli_file"]
+
+    # Build unified OG list sorted by ID
+    unified_entries = []
+    for og_id in sorted(all_og_ids.keys()):
+        unified_entries.append({
+            "og_id": og_id,
+            "castelli_file": all_og_ids[og_id],
+        })
+
+    print(f"Processing {len(unified_entries)} OGs ({len(og_entries)} from primary MAG, "
+          f"{len(unified_entries) - len(og_entries)} additional from extra genomes)...")
 
     # Catalog all unique headers across OG files for S. maritima detection
     all_headers_count = defaultdict(int)
 
     n_aligned = 0
     n_skipped_few_taxa = 0
-    n_skipped_no_mag = 0
+    n_skipped_no_proteins = 0
 
-    for entry in og_entries:
+    for entry in unified_entries:
         og_id = entry["og_id"]
         castelli_file = entry["castelli_file"]
-        protein_id = entry["protein_id"]
         og_path = Path(castelli_og_dir) / castelli_file
 
         if not og_path.exists():
@@ -234,18 +313,35 @@ def extract_and_align(og_mapping: str, castelli_og_dir: str, protein_file: str,
             if display_name is not None:
                 filtered[display_name] = _degap(seq)
 
+        # Add primary MAG protein if mapped to this OG
+        has_any_new = False
+        primary_entry = primary_og_lookup.get(og_id)
+        if primary_entry:
+            protein_id = primary_entry["protein_id"]
+            if protein_id in mag_proteins:
+                filtered["s7_ctg000008c"] = _degap(mag_proteins[protein_id])
+                has_any_new = True
+
+        # Add extra genome proteins if mapped to this OG
+        for extra in extra_genomes:
+            extra_entry = extra["og_lookup"].get(og_id)
+            if extra_entry:
+                protein_id = extra_entry["protein_id"]
+                if protein_id in extra["proteins"]:
+                    filtered[extra["tip_name"]] = _degap(extra["proteins"][protein_id])
+                    has_any_new = True
+
+        # Must have at least one new genome protein for this OG
+        if not has_any_new:
+            n_skipped_no_proteins += 1
+            continue
+
         # Check minimum ingroup taxa (excluding outgroup)
         ingroup_names = [n for n in filtered if n not in
                          ("Outgroup_009649675", "Thalassospira_profundimaris")]
         if len(ingroup_names) < 4:
             n_skipped_few_taxa += 1
             continue
-
-        # Add MAG protein
-        if protein_id not in mag_proteins:
-            n_skipped_no_mag += 1
-            continue
-        filtered["s7_ctg000008c"] = _degap(mag_proteins[protein_id])
 
         # Write unaligned FASTA
         unaligned_path = Path(output_dir) / f"{og_id}_unaligned.fasta"
@@ -275,7 +371,7 @@ def extract_and_align(og_mapping: str, castelli_og_dir: str, protein_file: str,
     print(f"\nAlignment summary:")
     print(f"  OGs aligned: {n_aligned}")
     print(f"  Skipped (< 4 ingroup taxa): {n_skipped_few_taxa}")
-    print(f"  Skipped (MAG protein not found): {n_skipped_no_mag}")
+    print(f"  Skipped (no new protein found): {n_skipped_no_proteins}")
 
     # S. maritima symbiont detection: find headers not matching any target
     # that appear in most OG files
@@ -285,7 +381,7 @@ def extract_and_align(og_mapping: str, castelli_og_dir: str, protein_file: str,
             matched_headers.add(hdr)
 
     unmatched_frequent = []
-    threshold = len(og_entries) * 0.5  # present in >50% of OGs
+    threshold = len(unified_entries) * 0.5  # present in >50% of OGs
     for hdr, count in sorted(all_headers_count.items(), key=lambda x: -x[1]):
         if hdr not in matched_headers and count > threshold:
             unmatched_frequent.append((hdr, count))
@@ -293,7 +389,7 @@ def extract_and_align(og_mapping: str, castelli_og_dir: str, protein_file: str,
     if unmatched_frequent:
         print(f"\nPotential missed taxa (unmatched headers in >50% of OGs):")
         for hdr, count in unmatched_frequent[:10]:
-            print(f"  {hdr} ({count}/{len(og_entries)} OGs)")
+            print(f"  {hdr} ({count}/{len(unified_entries)} OGs)")
         print("  Consider adding these to TARGET_TAXA if they are relevant.")
 
 
@@ -669,6 +765,8 @@ def main():
     p.add_argument("--protein-file", required=True, help="MAG protein FASTA (.faa)")
     p.add_argument("--output-dir", required=True, help="Output directory for aligned OGs")
     p.add_argument("--threads", type=int, default=4, help="Threads for MAFFT")
+    p.add_argument("--extra-genomes", default=None,
+                   help="Path to GTDB genome_manifest.json for adding extra genomes")
 
     # trim-alignments
     p = subparsers.add_parser("trim-alignments", help="Trim alignments with BMGE")
@@ -697,7 +795,7 @@ def main():
         map_ogs(args.eggnog_annotations, args.castelli_og_dir, args.output)
     elif args.command == "extract-and-align":
         extract_and_align(args.og_mapping, args.castelli_og_dir, args.protein_file,
-                          args.output_dir, args.threads)
+                          args.output_dir, args.threads, args.extra_genomes)
     elif args.command == "trim-alignments":
         trim_alignments(args.input_dir, args.output_dir)
     elif args.command == "concatenate":
