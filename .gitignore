@@ -6,9 +6,22 @@ reads/
 meta_assembly/
 gtdbtk_out/
 ncbi_submission/
-checkm2_out/
-16s_phylogenetic_analysis/
 blast/
+
+# checkm2_out/ — keep quality report
+checkm2_out/*
+!checkm2_out/quality_report.tsv
+
+# 16s_phylogenetic_analysis/ — keep key result files
+16s_phylogenetic_analysis/*
+!16s_phylogenetic_analysis/REPORT.md
+!16s_phylogenetic_analysis/*_tree*.treefile
+!16s_phylogenetic_analysis/*_tree*.contree
+!16s_phylogenetic_analysis/*_tree*.iqtree
+!16s_phylogenetic_analysis/*_tree*.rootstrap.nex
+!16s_phylogenetic_analysis/sequence_metadata.tsv
+!16s_phylogenetic_analysis/query_16s.fasta
+!16s_phylogenetic_analysis/alignment.fasta
 
 # ncbi_submission_quality_filtered — keep only the .gb annotation file
 ncbi_submission_quality_filtered/*
@@ -34,6 +47,14 @@ castelli_et_al/
 genome_phylogenetic_analysis/*
 !genome_phylogenetic_analysis/phylogeny_checkm_stats.csv
 !genome_phylogenetic_analysis/REPORT.md
+!genome_phylogenetic_analysis/genome_tree.treefile
+!genome_phylogenetic_analysis/genome_tree.contree
+!genome_phylogenetic_analysis/genome_tree.iqtree
+!genome_phylogenetic_analysis/partitions.txt
+!genome_phylogenetic_analysis/og_mapping.tsv
+!genome_phylogenetic_analysis/checkm_output/
+genome_phylogenetic_analysis/checkm_output/*
+!genome_phylogenetic_analysis/checkm_output/quality_report.tsv
 
 # GTDB enrichment data (step 07) — keep manifest and CheckM results
 gtdb_genomes/*

@@ -53,6 +53,20 @@ genome_phylogenetic_analysis/ + gtdb_genomes/
 
 These files are not tracked in the repository due to their size. Download them from NCBI before running the pipeline.
 
+### Reference databases and external data
+
+The pipeline requires several external datasets and databases. These are too large to include in the repository and must be obtained separately.
+
+| Data | Size | How to obtain | Used by |
+|------|------|---------------|---------|
+| `castelli_et_al/single_ogs/` | ~50M | Castelli et al. (2025) supplementary data — 179 single-copy OG alignments | Steps 06, 07 |
+| `castelli_et_al/Suppl_tab_7_newer_checkM_results.xlsx` | 132K | Castelli et al. (2025) Supplementary Table 7 | `merge_checkm_stats.py` |
+| `eggnog_data/` | ~48G | Downloaded automatically by step 06 script (eggNOG v5 from http://eggnog5.embl.de) | Steps 06, 07 |
+| GTDB-Tk database | ~70G | Manual setup required; see [GTDB-Tk docs](https://ecogenomics.github.io/GTDBTk/) | Step 02 |
+| CheckM v1 database | ~1.4G | `checkm data setRoot` in `checkm` conda env | Steps 06, 07 |
+| CheckM2 database | ~2.9G | `checkm2 database --download` (auto in step 04) | Step 04 |
+| SILVA SSU results | optional | Pre-downloaded from [SILVA](https://www.arb-silva.de/) nearest-neighbour search | Step 08 |
+
 ## Step 01: Split assembly into individual contigs
 
 **Script:** `01_preprocess_metagenome.sh`

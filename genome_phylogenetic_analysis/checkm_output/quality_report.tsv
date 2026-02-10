@@ -1,0 +1,4 @@
+Bin Id	Marker lineage	# genomes	# markers	# marker sets	Completeness	Contamination	Strain heterogeneity	Genome size (bp)	# ambiguous bases	# scaffolds	# contigs	N50 (scaffolds)	N50 (contigs)	Mean scaffold length (bp)	Mean contig length (bp)	Longest scaffold (bp)	Longest contig (bp)	GC	GC std (scaffolds > 1kbp)	Coding density	Translation table	# predicted genes	0	1	2	3	4	5+
+Terasakiella_pusilla_DSM_6293	o__Rhodospirillales (UID3754)	63	336	201	100.00	0.75	0.00	4053560	0	85	85	130826	130826	47688	47688	260560	260560	50.0	5.49	91.42	11	3978	0	334	2	0	0	0
+Thalassospira_profundimaris	o__Rhodospirillales (UID3754)	63	336	201	100.00	0.00	0.00	4380232	0	28	28	352116	352116	156436	156436	910770	910770	55.2	2.95	88.73	11	4067	0	336	0	0	0	0
+s7_ctg000008c	k__Bacteria (UID2565)	2921	152	93	97.85	0.00	0.00	1231242	0	1	1	1231242	1231242	1231242	1231242	1231242	1231242	29.0	0.00	86.95	11	1147	2	150	0	0	0	0
