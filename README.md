@@ -2,11 +2,11 @@
 
 This repository contains the analysis pipeline for bacterial genomes assembled from metagenomic data associated with the weevil *Anchylorhynchus bicarinatus*. Total DNA was extracted from the whole body of the insect, and non-insect reads were isolated using BlobTools. Bacterial genomes were then assembled from this metagenomic fraction using PacBio HiFi reads.
 
-The pipeline identifies, quality-filters, and characterizes metagenome-assembled genomes (MAGs), and places them phylogenetically using genome-wide protein markers.
+The pipeline identifies, quality-filters, and characterizes metagenome-assembled genomes (MAGs), and places them phylogenetically using genome-wide protein markers and 16S rRNA sequences.
 
 ## Pipeline overview
 
-The analysis proceeds through six numbered shell scripts, each corresponding to a discrete step. Scripts are designed to be run sequentially and are self-contained: each creates its own conda environment (if needed) and checks for required inputs before proceeding.
+The analysis proceeds through eight numbered shell scripts, each corresponding to a discrete step. Scripts are designed to be run sequentially and are self-contained: each creates its own conda environment (if needed) and checks for required inputs before proceeding.
 
 ```
 final_meta_assembly_palm_weevil.asm.p_ctg.fa
@@ -31,9 +31,17 @@ checkm2_out/
     v
 ncbi_submission_quality_filtered/ (1 genome: s7_ctg000008c)
     |
-    |-- [06] Genome-based phylogenetic analysis
+    |-- [06] Genome-based phylogenetic analysis (18 taxa)
     v
 genome_phylogenetic_analysis/
+    |
+    |-- [07] Enrich phylogeny with GTDB WRAU01 genomes (24 taxa)
+    v
+genome_phylogenetic_analysis/ + gtdb_genomes/
+    |
+    |-- [08] 16S rRNA phylogenetic analysis
+    v
+16s_phylogenetic_analysis/
 ```
 
 ## Input data
@@ -111,7 +119,7 @@ This genome represents a novel lineage within Alphaproteobacteria (order WRAU01,
 **Helper:** `phylo_genome_helper.py`
 **Environment file:** `symbiont_phylo_env.yml`
 
-Places the MAG within the phylogenomic framework of Castelli et al. (2025) to verify its relationship to Hepatincolaceae (WRAU01). Uses single-copy orthologous groups (OGs) from that study as a reference.
+Places the MAG within the phylogenomic framework of Castelli et al. (2025) to verify its relationship to Hepatincolaceae (WRAU01). Uses single-copy orthologous groups (OGs) from that study as a reference. Produces an initial 18-taxon tree; step 07 enriches this with additional GTDB genomes.
 
 **Dependencies:** Python >= 3.10, BioPython >= 1.81, pandas >= 2.0, eggNOG-mapper >= 2.1, diamond >= 2.0, MAFFT >= 7.520, BMGE >= 1.12, IQ-TREE >= 2.2
 
@@ -166,19 +174,104 @@ All output is written to `genome_phylogenetic_analysis/`:
 
 **Script:** `merge_checkm_stats.py`
 
-Compiles genome quality metrics (completeness, contamination, GC content, genome size) for all 18 taxa in the phylogenetic tree. Data are drawn from two sources:
+Compiles genome quality metrics (completeness, contamination, GC content, genome size) for all 24 taxa in the phylogenetic tree. Data are drawn from three sources:
 
 1. **Castelli et al. (2025)** -- CheckM results from Supplementary Table 7 for 15 taxa
-2. **This study** -- CheckM (v1.2.4) run on 3 additional genomes:
+2. **This study (original)** -- CheckM (v1.2.4) run on 3 genomes:
    - `s7_ctg000008c` (our MAG)
    - `Terasakiella_pusilla_DSM_6293` (GCA_000688235.1)
    - `Thalassospira_profundimaris` (GCA_000300275.1)
+3. **This study (GTDB enrichment)** -- CheckM (v1.2.4) run on 6 additional GTDB genomes (see Step 07)
 
-The two outgroup genomes were downloaded from NCBI and analyzed with CheckM `lineage_wf` to ensure comparability with the Castelli et al. data (which used CheckM, not CheckM2).
+All CheckM analyses use `lineage_wf` with `--reduced_tree` to ensure comparability with the Castelli et al. data (which used CheckM, not CheckM2).
 
-The script also adds a `new_name` column for display in figures, with format `"GCA_XXXXXXX.1 organism_name"` for genomes with NCBI accessions (organism names are fetched from the NCBI Assembly database via Entrez), `"tip_name (Castelli et al, 2025)"` for genomes without NCBI accessions, and `"A. bicarinatus symbiont"` for our MAG. Additionally, the script adds `host_species`, `host_family`, and `host_source` columns for symbiont genomes. Host data are sourced from NCBI BioSample records where available, supplemented with data from Dittmer et al. (2023) for *Hepatincola* symbionts, Castelli et al. (2025) for *Tardigradibacter* and *Haliotis* symbiont species identification, and this study for the *A. bicarinatus* symbiont. Non-symbiont genomes receive "NA" for all three host columns. **Running this script requires internet access** to query NCBI.
+The script also adds a `new_name` column for display in figures, with format `"GCA_XXXXXXX.1 organism_name"` for genomes with NCBI accessions (organism names are fetched from the NCBI Assembly database via Entrez), `"tip_name (Castelli et al, 2025)"` for genomes without NCBI accessions, and `"A. bicarinatus symbiont"` for our MAG. Additionally, the script adds `host_species`, `host_family`, and `host_source` columns for symbiont genomes. Host data are sourced from NCBI BioSample records where available, supplemented with data from Dittmer et al. (2023) for *Hepatincola* symbionts, Castelli et al. (2025) for *Tardigradibacter* and *Haliotis* symbiont species identification, and this study for the *A. bicarinatus* symbiont. Non-symbiont genomes receive "NA" for all three host columns.
+
+When called with `--gtdb-manifest`, the script also incorporates the GTDB enrichment genomes from step 07 into the metadata table.
+
+**Running this script requires internet access** to query NCBI.
 
 **Note on CheckM vs CheckM2:** CheckM uses lineage-specific marker genes with phylogenetic placement, while CheckM2 uses machine learning. Results are generally comparable but may differ for divergent lineages. This study uses CheckM2 for initial quality filtering (Step 04) but CheckM for the final comparative table to match Castelli et al.'s methodology.
+
+## Step 07: Enrich phylogeny with GTDB WRAU01 genomes
+
+**Script:** `07_enrich_with_gtdb.sh`
+**Helper:** `gtdb_enrichment_helper.py`
+
+Enriches the 18-taxon phylogeny from step 06 with all additional genomes classified in GTDB order WRAU01. Queries the GTDB API, downloads protein and genomic FASTAs from NCBI, runs eggNOG-mapper, rebuilds the phylogeny with the expanded taxon set, and runs CheckM v1 for comparable quality metrics.
+
+**Dependencies:** Same as step 06, plus CheckM v1 (in the `checkm` conda environment)
+
+### Workflow
+
+1. **Query GTDB** -- Searches the GTDB API for all genomes in order WRAU01. Classifies each as "existing" (already in tree), "duplicate", or "new". Generates a manifest JSON.
+
+2. **Download proteins** -- Downloads protein FASTAs from NCBI FTP for new genomes. Falls back to Prodigal gene prediction when protein files are unavailable (common for European genome assemblies from ENA).
+
+3. **eggNOG-mapper** -- Annotates new genomes with eggNOG (diamond blastp + emapper.py).
+
+4. **OG mapping** -- Maps eggNOG annotations to Castelli single-copy OGs.
+
+5. **Extract and align** -- Rebuilds all OG alignments with the enriched taxon set (uses `--extra-genomes` flag in `phylo_genome_helper.py`).
+
+6--8. **Trim, concatenate, debias** -- Same as step 06.
+
+9. **IQ-TREE** -- Rebuilds the phylogeny with the enriched alignment.
+
+10. **Download genomic FASTAs** -- Downloads nucleotide assemblies for CheckM.
+
+11. **CheckM v1** -- Runs `lineage_wf` on new genomes for comparable quality assessment.
+
+12. **Metadata** -- Updates `phylogeny_checkm_stats.csv` with CheckM stats and host metadata.
+
+### GTDB WRAU01 genome inventory
+
+Of 8 genomes in GTDB order WRAU01, 6 were new additions:
+
+| Accession | Tip Name | Host |
+|-----------|----------|------|
+| GCA_031256515.1 | WRAU01_MAG_031256515 | *Cornitermes pugnax* (Termitidae) |
+| GCA_031274895.1 | WRAU01_MAG_031274895 | *Jugositermes tuberculatus* (Termitidae) |
+| GCA_945888065.1 | WRAU01_MAG_945888065 | — |
+| GCA_947460385.1 | WRAU01_MAG_947460385 | — |
+| GCA_964020055.1 | Symbiont_of_P_viduata | *Pipizella viduata* (Syrphidae) |
+| GCA_964020105.1 | Symbiont_of_E_torrentis | *Ecdyonurus torrentis* (Heptageniidae) |
+
+### Output
+
+Output is written to `genome_phylogenetic_analysis/` (overwriting step 06 results; git preserves history) and `gtdb_genomes/`.
+
+| File | Description |
+|------|-------------|
+| `gtdb_genomes/genome_manifest.json` | GTDB genome inventory with metadata |
+| `gtdb_genomes/checkm_output/quality_report.tsv` | CheckM v1 results for new genomes |
+| `genome_phylogenetic_analysis/phylogeny_checkm_stats.csv` | Updated metadata (24 taxa) |
+| `genome_phylogenetic_analysis/genome_tree.treefile` | ML tree (24 taxa) |
+| `genome_phylogenetic_analysis/REPORT.md` | Summary report |
+
+## Step 08: 16S rRNA phylogenetic analysis
+
+**Script:** `08_16s_phylogenetic_analysis.sh`
+**Helper:** `phylo_16s_helper.py`
+
+Builds a 16S rRNA phylogeny for the *A. bicarinatus* symbiont by combining sequences from multiple sources: NCBI BLAST hits, SILVA nearest-neighbour search, and 16S sequences extracted from GTDB WRAU01-classified genomes.
+
+**Dependencies:** Python >= 3.10, BioPython >= 1.81, BLAST+ >= 2.14, MAFFT >= 7.520, CD-HIT >= 4.8, IQ-TREE >= 2.2
+
+### Workflow
+
+1. **16S extraction** -- Extracts the 16S rRNA sequence from the annotated GenBank file.
+2. **BLAST search** -- Queries the NCBI nt database for nearest neighbours.
+3. **SILVA search** -- Incorporates results from a pre-downloaded SILVA SSU search.
+4. **GTDB sequences** -- Retrieves 16S sequences from GTDB WRAU01-classified genome assemblies.
+5. **Deduplication** -- Merges all sources and deduplicates with CD-HIT-EST at 99% identity.
+6. **Metadata** -- Creates an annotated metadata table for all sequences.
+7. **Alignment** -- Aligns with MAFFT (with reverse-complement detection).
+8. **Tree inference** -- Builds a phylogeny with IQ-TREE using the UNREST model for compositional heterogeneity.
+
+### Output
+
+All output is written to `16s_phylogenetic_analysis/`.
 
 ## Conda environments
 
@@ -187,16 +280,18 @@ The pipeline uses three conda environments:
 | Environment | Scripts | Environment file | Notes |
 |-------------|---------|-----------------|-------|
 | `gtdbtk-2.1.1` | 02 | (pre-existing) | Must be created manually before running step 02 |
-| `checkm2` | 04 | (created by script) | Created automatically by `04_run_checkm2.sh` |
-| `checkm` | merge_checkm_stats.py | (created manually) | For comparable CheckM stats; see above |
-| `symbiont_phylo` | 01, 03, 05, 06 | `symbiont_phylo_env.yml` | Created automatically if absent |
+| `checkm2` | 04 | (created by script) | Created automatically by `04_run_checkm2.sh`; also provides Prodigal for step 07 |
+| `checkm` | 07, merge_checkm_stats.py | (created manually) | CheckM v1 for comparable quality stats |
+| `symbiont_phylo` | 01, 03, 05, 06, 07, 08 | `symbiont_phylo_env.yml` | Created automatically if absent |
 
 ## Reproducibility
 
 All analyses are driven by shell scripts and Python helpers that can be re-run from scratch. Each step that requires specific software defines its dependencies in a conda environment YAML file, and the corresponding shell script creates the environment automatically if it does not already exist.
 
-Step 06 accepts an optional environment variable:
+Steps 06 and 07 accept an optional environment variable:
 - `EGGNOG_DB_DIR` -- Path to eggNOG database directory (defaults to `eggnog_data/`). The database is downloaded automatically if not present.
+
+Step 07 requires internet access to query the GTDB API and download genomes from NCBI.
 
 Scripts were developed with the assistance of Claude Code (Anthropic).
 
@@ -213,5 +308,8 @@ Scripts were developed with the assistance of Claude Code (Anthropic).
 | diamond | >= 2.0 | Protein sequence search |
 | MAFFT | >= 7.520 | Multiple sequence alignment |
 | BMGE | >= 1.12 | Alignment trimming |
-| IQ-TREE | >= 2.2 | Phylogenetic inference and model selection |
+| IQ-TREE | 3.0.1 | Phylogenetic inference and model selection |
 | BioPython | >= 1.81 | Sequence parsing |
+| Prodigal | >= 2.6 | Gene prediction (fallback for genomes without protein files) |
+| BLAST+ | >= 2.14 | 16S rRNA sequence search |
+| CD-HIT | >= 4.8 | Sequence deduplication |
