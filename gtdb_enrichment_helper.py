@@ -4,6 +4,7 @@ Helper script for enriching the phylogeny with GTDB WRAU01 genomes.
 
 Subcommands:
   query-gtdb         Search GTDB API for WRAU01 genomes, build manifest
+  add-manual-genome  Download a genome from a WGS accession and add to manifest
   download-proteins  Download protein FASTAs from NCBI for new genomes
   run-eggnog         Run eggNOG-mapper (diamond + emapper) for new genomes
   build-og-mappings  Map proteins to Castelli OGs for new genomes
@@ -12,6 +13,7 @@ Subcommands:
 
 Usage:
     python gtdb_enrichment_helper.py query-gtdb --output-dir gtdb_genomes
+    python gtdb_enrichment_helper.py add-manual-genome --manifest gtdb_genomes/genome_manifest.json --wgs-accession JBEXBW000000000 --tip-name Symbiont_of_S_maritima ...
     python gtdb_enrichment_helper.py download-proteins --manifest gtdb_genomes/genome_manifest.json
     python gtdb_enrichment_helper.py run-eggnog --manifest gtdb_genomes/genome_manifest.json --eggnog-db eggnog_data --threads 20
     python gtdb_enrichment_helper.py build-og-mappings --manifest gtdb_genomes/genome_manifest.json --castelli-og-dir castelli_et_al/single_ogs
@@ -48,6 +50,7 @@ EXISTING_ACCESSIONS = {
 EXISTING_TIP_NAMES = {
     "Hepatincola_Av", "Hepatincola_Pdp", "Hepatincola_Pp",
     "Tardigradibacter_bertolanii", "s7_ctg000008c",
+    "Symbiont_of_S_maritima",
 }
 
 # Explicit duplicates: GTDB accession -> existing tip name it duplicates
@@ -295,6 +298,291 @@ def query_gtdb(output_dir: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# add-manual-genome
+# ---------------------------------------------------------------------------
+
+def _download_wgs_proteins(accession: str, output_dir: Path) -> str | None:
+    """Download proteins for a WGS accession (no GCA assembly).
+
+    Three-tier fallback:
+      (a) Download pre-computed proteins from NCBI WGS trace archive
+      (b) efetch fasta_cds_aa on the WGS master record
+      (c) Download nucleotide FASTA + run Prodigal
+    """
+    faa_path = output_dir / "proteins.faa"
+    if faa_path.exists() and faa_path.stat().st_size > 0:
+        n_seqs = sum(1 for line in open(faa_path) if line.startswith(">"))
+        print(f"  Protein FASTA already exists: {faa_path} ({n_seqs} proteins)")
+        return str(faa_path)
+
+    # Derive WGS prefix from accession (e.g. JBEXBW000000000 -> JBEXBW01)
+    # WGS master accessions: 6-letter prefix + 9 zeros; version is 01
+    wgs_prefix = accession[:6] + "01"
+    gz_path = output_dir / "proteins.faa.gz"
+
+    # (a) Try NCBI WGS trace archive (pre-computed protein FASTA)
+    # URL pattern: https://sra-download.ncbi.nlm.nih.gov/traces/wgs04/wgs_aux/JB/EX/BW/JBEXBW01/JBEXBW01.1.fsa_aa.gz
+    p = wgs_prefix  # e.g. JBEXBW01
+    wgs_url = (
+        f"https://sra-download.ncbi.nlm.nih.gov/traces/wgs04/wgs_aux/"
+        f"{p[0:2]}/{p[2:4]}/{p[4:6]}/{p}/{p}.1.fsa_aa.gz"
+    )
+    print(f"  Trying WGS trace archive: {wgs_url}")
+    _fetch_url_binary(wgs_url, str(gz_path))
+
+    if gz_path.exists() and gz_path.stat().st_size > 100:
+        try:
+            with gzip.open(str(gz_path), 'rb') as f_in:
+                with open(str(faa_path), 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            gz_path.unlink()
+            with open(faa_path) as fh:
+                first_line = fh.readline()
+            if first_line.startswith(">"):
+                n_seqs = sum(1 for line in open(faa_path) if line.startswith(">"))
+                print(f"  Downloaded {n_seqs} proteins from WGS trace archive")
+                return str(faa_path)
+            else:
+                faa_path.unlink(missing_ok=True)
+        except gzip.BadGzipFile:
+            gz_path.unlink(missing_ok=True)
+            faa_path.unlink(missing_ok=True)
+    else:
+        gz_path.unlink(missing_ok=True)
+
+    base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+
+    # (b) Try efetch fasta_cds_aa directly on WGS master
+    print(f"  Trying efetch fasta_cds_aa on WGS master {accession}...")
+    url = f"{base_url}/efetch.fcgi?db=nuccore&id={accession}&rettype=fasta_cds_aa&retmode=text"
+    text = _fetch_url(url)
+    time.sleep(0.5)
+    if text.strip() and text.strip().startswith(">"):
+        with open(faa_path, "w") as fh:
+            fh.write(text)
+        n_seqs = sum(1 for line in open(faa_path) if line.startswith(">"))
+        if n_seqs > 10:
+            print(f"  Downloaded {n_seqs} proteins via efetch (WGS master)")
+            return str(faa_path)
+        else:
+            faa_path.unlink(missing_ok=True)
+
+    # (c) Download nucleotide FASTA + Prodigal
+    print(f"  Falling back to nucleotide download + Prodigal...")
+    fna_path = output_dir / "genomic.fna"
+
+    if not (fna_path.exists() and fna_path.stat().st_size > 0):
+        # Try WGS trace archive for nucleotide
+        nuc_gz_path = output_dir / "genomic.fna.gz"
+        nuc_url = (
+            f"https://sra-download.ncbi.nlm.nih.gov/traces/wgs04/wgs_aux/"
+            f"{p[0:2]}/{p[2:4]}/{p[4:6]}/{p}/{p}.1.fsa_nt.gz"
+        )
+        print(f"  Trying WGS trace nucleotide: {nuc_url}")
+        _fetch_url_binary(nuc_url, str(nuc_gz_path))
+
+        if nuc_gz_path.exists() and nuc_gz_path.stat().st_size > 100:
+            try:
+                with gzip.open(str(nuc_gz_path), 'rb') as f_in:
+                    with open(str(fna_path), 'wb') as f_out:
+                        shutil.copyfileobj(f_in, f_out)
+                nuc_gz_path.unlink()
+                print(f"  Downloaded nucleotide FASTA ({fna_path.stat().st_size:,} bytes)")
+            except gzip.BadGzipFile:
+                nuc_gz_path.unlink(missing_ok=True)
+        else:
+            nuc_gz_path.unlink(missing_ok=True)
+
+    if not (fna_path.exists() and fna_path.stat().st_size > 0):
+        print(f"  WARNING: Could not download nucleotide FASTA")
+        return None
+
+    # Run Prodigal
+    prodigal_bin = shutil.which("prodigal")
+    if not prodigal_bin:
+        prodigal_bin = os.path.expanduser("~/miniconda3/envs/checkm2/bin/prodigal")
+    if not os.path.exists(prodigal_bin):
+        print(f"  WARNING: prodigal not found")
+        return None
+
+    print(f"  Running prodigal -p meta...")
+    try:
+        subprocess.run(
+            [prodigal_bin, "-i", str(fna_path), "-a", str(faa_path),
+             "-p", "meta", "-q"],
+            capture_output=True, text=True, check=True,
+        )
+        n_seqs = sum(1 for line in open(faa_path) if line.startswith(">"))
+        print(f"  Prodigal predicted {n_seqs} proteins")
+        return str(faa_path)
+    except subprocess.CalledProcessError as e:
+        print(f"  WARNING: Prodigal failed: {e.stderr[:200]}")
+        return None
+
+
+def add_manual_genome(manifest_path: str, wgs_accession: str, tip_name: str,
+                      organism_name: str, eggnog_db: str, castelli_og_dir: str,
+                      threads: int, checkm_completeness: float | None = None,
+                      checkm_contamination: float | None = None,
+                      gc_content: float | None = None,
+                      genome_size: int | None = None,
+                      n_contigs: int | None = None) -> None:
+    """Download a genome from a WGS accession and integrate it into the manifest.
+
+    This handles genomes that don't have a GCA assembly accession (e.g. the
+    Strigamia maritima endosymbiont which only has WGS accession JBEXBW000000000).
+    """
+    with open(manifest_path) as fh:
+        manifest = json.load(fh)
+
+    manifest_dir = Path(manifest_path).parent
+    genome_dir = manifest_dir / wgs_accession
+    genome_dir.mkdir(parents=True, exist_ok=True)
+
+    # Check if already fully processed
+    faa_path = genome_dir / "proteins.faa"
+    eggnog_annotations = str(genome_dir / "eggnog" / "eggnog.emapper.annotations")
+    og_mapping_file = str(genome_dir / "og_mapping.tsv")
+
+    for genome in manifest["genomes"]:
+        if genome.get("tip_name") == tip_name:
+            if (os.path.exists(og_mapping_file) and os.path.getsize(og_mapping_file) > 0
+                    and faa_path.exists() and faa_path.stat().st_size > 0):
+                print(f"Genome {tip_name} already fully processed, ensuring manifest paths are correct.")
+                # Repair manifest entry paths in case a previous step clobbered them
+                genome["protein_fasta"] = str(faa_path)
+                genome["eggnog_annotations"] = eggnog_annotations
+                genome["og_mapping"] = og_mapping_file
+                with open(manifest_path, "w") as fh:
+                    json.dump(manifest, fh, indent=2)
+                return
+            break
+    else:
+        genome = None
+
+    # Step 1: Download proteins
+    print(f"=== Adding manual genome: {tip_name} ({wgs_accession}) ===")
+    protein_path = _download_wgs_proteins(wgs_accession, genome_dir)
+    if not protein_path:
+        print(f"ERROR: Could not obtain proteins for {wgs_accession}")
+        return
+
+    # Step 2: Run eggNOG-mapper
+    eggnog_dir = genome_dir / "eggnog"
+    eggnog_dir.mkdir(parents=True, exist_ok=True)
+    output_prefix = str(eggnog_dir / "eggnog")
+    annotations_file = f"{output_prefix}.emapper.annotations"
+
+    if os.path.exists(annotations_file) and os.path.getsize(annotations_file) > 0:
+        print(f"  eggNOG annotations already exist: {annotations_file}")
+    else:
+        diamond_bin = _conda_bin("diamond")
+        emapper_bin = _conda_bin("emapper.py")
+        print(f"  Running diamond blastp...")
+        diamond_tmp = f"{output_prefix}.diamond.tmp"
+        seed_orthologs = f"{output_prefix}.seed_orthologs"
+        try:
+            subprocess.run(
+                [diamond_bin, "blastp",
+                 "-d", f"{eggnog_db}/eggnog_proteins.dmnd",
+                 "-q", protein_path,
+                 "--threads", str(threads),
+                 "-o", diamond_tmp,
+                 "-e", "0.001",
+                 "--max-target-seqs", "10",
+                 "--outfmt", "6", "qseqid", "sseqid", "pident", "length",
+                 "mismatch", "gapopen", "qstart", "qend", "sstart", "send",
+                 "evalue", "bitscore", "qcovhsp", "scovhsp"],
+                capture_output=True, text=True, check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            print(f"  diamond failed: {e.stderr[:300]}")
+            return
+
+        with open(diamond_tmp) as fin, open(seed_orthologs, "w") as fout:
+            for line in fin:
+                fields = line.strip().split("\t")
+                if len(fields) >= 12:
+                    fout.write(f"{fields[0]}\t{fields[1]}\t{fields[10]}\t{fields[11]}\n")
+        os.unlink(diamond_tmp)
+
+        print(f"  Running emapper.py --no_search...")
+        try:
+            subprocess.run(
+                [emapper_bin,
+                 "-m", "no_search",
+                 "--annotate_hits_table", seed_orthologs,
+                 "--no_file_comments",
+                 "--output", output_prefix,
+                 "--data_dir", eggnog_db,
+                 "--cpu", str(threads)],
+                capture_output=True, text=True, check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            print(f"  emapper failed: {e.stderr[:300]}")
+            return
+
+    if not os.path.exists(annotations_file):
+        print(f"  WARNING: eggNOG annotations not produced")
+        return
+
+    n_annotated = sum(1 for line in open(annotations_file)
+                      if not line.startswith("#") and line.strip())
+    print(f"  Annotated {n_annotated} proteins")
+
+    # Step 3: Build OG mapping
+    sys.path.insert(0, str(Path(manifest_path).resolve().parent.parent))
+    from phylo_genome_helper import map_ogs
+
+    og_mapping_path = str(genome_dir / "og_mapping.tsv")
+    if os.path.exists(og_mapping_path) and os.path.getsize(og_mapping_path) > 0:
+        print(f"  OG mapping already exists: {og_mapping_path}")
+    else:
+        map_ogs(annotations_file, castelli_og_dir, og_mapping_path)
+
+    n_mapped = sum(1 for i, line in enumerate(open(og_mapping_path))
+                   if i > 0 and line.strip())
+    print(f"  Mapped to {n_mapped} Castelli OGs")
+
+    # Step 4: Add/update manifest entry
+    entry = {
+        "accession": wgs_accession,
+        "gid": wgs_accession,
+        "ncbi_organism": organism_name,
+        "gtdb_taxonomy": "",
+        "status": "new",
+        "tip_name": tip_name,
+        "duplicate_of": None,
+        "checkm_completeness": checkm_completeness,
+        "checkm_contamination": checkm_contamination,
+        "gc_content": gc_content,
+        "genome_size": genome_size,
+        "n_contigs": n_contigs,
+        "biosample_accn": "",
+        "protein_fasta": protein_path,
+        "eggnog_annotations": annotations_file,
+        "og_mapping": og_mapping_path,
+    }
+
+    # Replace existing entry or append
+    replaced = False
+    for i, g in enumerate(manifest["genomes"]):
+        if g.get("tip_name") == tip_name:
+            manifest["genomes"][i] = entry
+            replaced = True
+            break
+    if not replaced:
+        manifest["genomes"].append(entry)
+
+    with open(manifest_path, "w") as fh:
+        json.dump(manifest, fh, indent=2)
+
+    print(f"\n  Manifest updated with {tip_name}")
+    print(f"  Proteins: {protein_path}")
+    print(f"  OG mapping: {og_mapping_path} ({n_mapped} OGs)")
+
+
+# ---------------------------------------------------------------------------
 # download-proteins
 # ---------------------------------------------------------------------------
 
@@ -448,6 +736,17 @@ def download_proteins(manifest_path: str) -> None:
         tip_name = genome["tip_name"]
         output_dir = Path(manifest_path).parent / accession
         output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Skip if protein FASTA already exists (e.g. from add-manual-genome)
+        existing_faa = genome.get("protein_fasta")
+        faa_on_disk = output_dir / "proteins.faa"
+        if existing_faa and os.path.exists(existing_faa) and os.path.getsize(existing_faa) > 0:
+            print(f"[{accession}] {tip_name}: proteins already exist, skipping.")
+            continue
+        if faa_on_disk.exists() and faa_on_disk.stat().st_size > 0:
+            print(f"[{accession}] {tip_name}: proteins found on disk, updating manifest.")
+            genome["protein_fasta"] = str(faa_on_disk)
+            continue
 
         print(f"[{accession}] {tip_name}")
 
@@ -847,6 +1146,22 @@ def main():
     p.add_argument("--output-dir", required=True,
                    help="Output directory for manifest and genome data")
 
+    # add-manual-genome
+    p = subparsers.add_parser("add-manual-genome",
+                              help="Download a WGS genome and add to manifest")
+    p.add_argument("--manifest", required=True, help="Path to genome_manifest.json")
+    p.add_argument("--wgs-accession", required=True, help="WGS master accession (e.g. JBEXBW000000000)")
+    p.add_argument("--tip-name", required=True, help="Tip name for phylogeny")
+    p.add_argument("--organism-name", default="", help="Organism name")
+    p.add_argument("--eggnog-db", required=True, help="Path to eggNOG database directory")
+    p.add_argument("--castelli-og-dir", required=True, help="Directory with Castelli single-copy OG files")
+    p.add_argument("--threads", type=int, default=4, help="Number of threads")
+    p.add_argument("--checkm-completeness", type=float, default=None, help="Pre-computed CheckM completeness")
+    p.add_argument("--checkm-contamination", type=float, default=None, help="Pre-computed CheckM contamination")
+    p.add_argument("--gc-content", type=float, default=None, help="Pre-computed GC content (fraction 0-1)")
+    p.add_argument("--genome-size", type=int, default=None, help="Pre-computed genome size (bp)")
+    p.add_argument("--n-contigs", type=int, default=None, help="Pre-computed number of contigs")
+
     # download-proteins
     p = subparsers.add_parser("download-proteins",
                               help="Download protein FASTAs for new genomes")
@@ -881,6 +1196,13 @@ def main():
 
     if args.command == "query-gtdb":
         query_gtdb(args.output_dir)
+    elif args.command == "add-manual-genome":
+        add_manual_genome(
+            args.manifest, args.wgs_accession, args.tip_name,
+            args.organism_name, args.eggnog_db, args.castelli_og_dir,
+            args.threads, args.checkm_completeness, args.checkm_contamination,
+            args.gc_content, args.genome_size, args.n_contigs,
+        )
     elif args.command == "download-proteins":
         download_proteins(args.manifest)
     elif args.command == "run-eggnog":

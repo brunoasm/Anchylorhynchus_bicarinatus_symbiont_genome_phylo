@@ -35,7 +35,7 @@ ncbi_submission_quality_filtered/ (1 genome: s7_ctg000008c)
     v
 genome_phylogenetic_analysis/
     |
-    |-- [07] Enrich phylogeny with GTDB WRAU01 genomes (24 taxa)
+    |-- [07] Enrich phylogeny with GTDB WRAU01 genomes (25 taxa)
     v
 genome_phylogenetic_analysis/ + gtdb_genomes/
     |
@@ -188,7 +188,7 @@ All output is written to `genome_phylogenetic_analysis/`:
 
 **Script:** `merge_checkm_stats.py`
 
-Compiles genome quality metrics (completeness, contamination, GC content, genome size) for all 24 taxa in the phylogenetic tree. Data are drawn from three sources:
+Compiles genome quality metrics (completeness, contamination, GC content, genome size) for all 25 taxa in the phylogenetic tree. Data are drawn from three sources:
 
 1. **Castelli et al. (2025)** -- CheckM results from Supplementary Table 7 for 15 taxa
 2. **This study (original)** -- CheckM (v1.2.4) run on 3 genomes:
@@ -212,13 +212,15 @@ When called with `--gtdb-manifest`, the script also incorporates the GTDB enrich
 **Script:** `07_enrich_with_gtdb.sh`
 **Helper:** `gtdb_enrichment_helper.py`
 
-Enriches the 18-taxon phylogeny from step 06 with all additional genomes classified in GTDB order WRAU01. Queries the GTDB API, downloads protein and genomic FASTAs from NCBI, runs eggNOG-mapper, rebuilds the phylogeny with the expanded taxon set, and runs CheckM v1 for comparable quality metrics.
+Enriches the 18-taxon phylogeny from step 06 with all additional genomes classified in GTDB order WRAU01, plus the *Strigamia maritima* endosymbiont (WGS accession JBEXBW000000000) which was in Castelli et al.'s original phylogeny but missing from their shared alignment files. Queries the GTDB API, downloads protein and genomic FASTAs from NCBI, runs eggNOG-mapper, rebuilds the phylogeny with the expanded taxon set, and runs CheckM v1 for comparable quality metrics. IQ-TREE is run with a monophyly constraint on the two outgroup taxa (Outgroup_009649675 + Thalassospira_profundimaris).
 
 **Dependencies:** Same as step 06, plus CheckM v1 (in the `checkm` conda environment)
 
 ### Workflow
 
 1. **Query GTDB** -- Searches the GTDB API for all genomes in order WRAU01. Classifies each as "existing" (already in tree), "duplicate", or "new". Generates a manifest JSON.
+
+1b. **Add Strigamia symbiont** -- Downloads proteins for the *Strigamia maritima* endosymbiont (WGS accession JBEXBW000000000), runs eggNOG-mapper, and maps to Castelli OGs. This genome was in Castelli et al.'s original phylogeny but its protein sequences are missing from their shared OG alignment files. CheckM stats are pre-populated from Castelli's Supplementary Table 7.
 
 2. **Download proteins** -- Downloads protein FASTAs from NCBI FTP for new genomes. Falls back to Prodigal gene prediction when protein files are unavailable (common for European genome assemblies from ENA).
 
@@ -230,7 +232,7 @@ Enriches the 18-taxon phylogeny from step 06 with all additional genomes classif
 
 6--8. **Trim, concatenate, debias** -- Same as step 06.
 
-9. **IQ-TREE** -- Rebuilds the phylogeny with the enriched alignment.
+9. **IQ-TREE** -- Rebuilds the phylogeny with the enriched alignment. ModelFinder tests LG, WAG, JTT, Q.pfam and mixture models (LG+C10/C20/C40/C60+F+R, Q.pfam+C60+F+R, LG4X+R). Uses a monophyly constraint (`-g`) on the two outgroup taxa (Outgroup_009649675 + Thalassospira_profundimaris) to ensure correct rooting.
 
 10. **Download genomic FASTAs** -- Downloads nucleotide assemblies for CheckM.
 
@@ -240,10 +242,11 @@ Enriches the 18-taxon phylogeny from step 06 with all additional genomes classif
 
 ### GTDB WRAU01 genome inventory
 
-Of 8 genomes in GTDB order WRAU01, 6 were new additions:
+Of 8 genomes in GTDB order WRAU01, 6 were new additions. Additionally, the *Strigamia maritima* endosymbiont (WGS-only, no GCA accession) was added:
 
 | Accession | Tip Name | Host |
 |-----------|----------|------|
+| JBEXBW000000000 (WGS) | Symbiont_of_S_maritima | *Strigamia maritima* (Linotaeniidae) |
 | GCA_031256515.1 | WRAU01_MAG_031256515 | *Cornitermes pugnax* (Termitidae) |
 | GCA_031274895.1 | WRAU01_MAG_031274895 | *Jugositermes tuberculatus* (Termitidae) |
 | GCA_945888065.1 | WRAU01_MAG_945888065 | — |
@@ -259,8 +262,8 @@ Output is written to `genome_phylogenetic_analysis/` (overwriting step 06 result
 |------|-------------|
 | `gtdb_genomes/genome_manifest.json` | GTDB genome inventory with metadata |
 | `gtdb_genomes/checkm_output/quality_report.tsv` | CheckM v1 results for new genomes |
-| `genome_phylogenetic_analysis/phylogeny_checkm_stats.csv` | Updated metadata (24 taxa) |
-| `genome_phylogenetic_analysis/genome_tree.treefile` | ML tree (24 taxa) |
+| `genome_phylogenetic_analysis/phylogeny_checkm_stats.csv` | Updated metadata (25 taxa) |
+| `genome_phylogenetic_analysis/genome_tree.treefile` | ML tree (25 taxa) |
 | `genome_phylogenetic_analysis/REPORT.md` | Summary report |
 
 ## Step 08: 16S rRNA phylogenetic analysis

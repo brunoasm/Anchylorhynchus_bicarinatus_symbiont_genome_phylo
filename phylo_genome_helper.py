@@ -718,6 +718,7 @@ def generate_summary(output_dir: str) -> None:
                 "Tardigradibacter_bertolanii", "Hepatincola_Pp",
                 "Hepatincola_Av", "Hepatincola_Pdp",
                 "Symbiont_of_L_labralis", "s7_ctg000008c",
+                "Symbiont_of_S_maritima",
             }
             outgroup_keys = {"Outgroup_009649675", "Thalassospira_profundimaris"}
 

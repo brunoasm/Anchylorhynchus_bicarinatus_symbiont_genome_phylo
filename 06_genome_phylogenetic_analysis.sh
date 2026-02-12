@@ -242,6 +242,7 @@ iqtree3 -s "$DEBIASED" \
     -B 1000 \
     --alrt 1000 \
     -T AUTO \
+    -g "$OUTPUT_DIR/constraint.tre"
     --prefix "$OUTPUT_DIR/genome_tree"
 
 echo ""

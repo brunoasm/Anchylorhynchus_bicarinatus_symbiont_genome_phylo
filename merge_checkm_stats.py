@@ -47,6 +47,7 @@ TIP_TO_CASTELLI_PATTERN = {
     "Marine_MAG_018662225": "GCA_018662225",
     "Outgroup_009649675": "GCA_009649675",
     "Symbiont_of_L_labralis": "GCA_009780035",
+    "Symbiont_of_S_maritima": "Symbiont_of_Strigamia_maritima",
 }
 
 # Mapping from CheckM bin IDs to phylogeny tip names (for our CheckM results)
@@ -81,6 +82,7 @@ HARDCODED_HOSTS = {
     "Hepatincola_Pp": ("Porcellionides pruinosus", "Porcellionidae", "Dittmer_et_al_2023"),
     "Hepatincola_Pdp": ("Porcellio dilatatus petiti", "Porcellionidae", "Dittmer_et_al_2023"),
     "Tardigradibacter_bertolanii": ("Richtersius cf. coronifer", "Richtersiidae", "Castelli_et_al_2025"),
+    "Symbiont_of_S_maritima": ("Strigamia maritima", "Linotaeniidae", "Castelli_et_al_2025"),
 }
 
 # Map NCBI BioSample host names to taxonomic families
@@ -409,6 +411,9 @@ def main():
     if args.gtdb_manifest and args.gtdb_manifest.exists():
         print("Adding GTDB enrichment genomes:")
         gtdb_results, gtdb_manifest = load_gtdb_manifest(args.gtdb_manifest)
+        # Dedup: skip GTDB tips that already appeared in Castelli/our results
+        existing_tips = {r['tip_name'] for r in all_results}
+        gtdb_results = [r for r in gtdb_results if r['tip_name'] not in existing_tips]
         all_results.extend(gtdb_results)
 
         # Build lookup dicts for GTDB genomes
@@ -437,6 +442,8 @@ def main():
     def make_new_name(tip_name):
         if tip_name == "s7_ctg000008c":
             return "A. bicarinatus symbiont"
+        if tip_name == "Symbiont_of_S_maritima":
+            return "JBEXBW000000000 endosymbiont of Strigamia maritima"
         accession = all_tip_to_accession.get(tip_name)
         if accession and accession in organism_names:
             return f"{accession} {organism_names[accession]}"

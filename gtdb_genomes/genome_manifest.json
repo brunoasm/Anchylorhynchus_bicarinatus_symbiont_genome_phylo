@@ -159,6 +159,24 @@
       "eggnog_annotations": "gtdb_genomes/GCA_964020105.1/eggnog/eggnog.emapper.annotations",
       "og_mapping": "gtdb_genomes/GCA_964020105.1/og_mapping.tsv",
       "genomic_fasta": "gtdb_genomes/GCA_964020105.1/genomic.fna"
+    },
+    {
+      "accession": "JBEXBW000000000",
+      "gid": "JBEXBW000000000",
+      "ncbi_organism": "endosymbiont of Strigamia maritima",
+      "gtdb_taxonomy": "",
+      "status": "new",
+      "tip_name": "Symbiont_of_S_maritima",
+      "duplicate_of": null,
+      "checkm_completeness": 86.8,
+      "checkm_contamination": 1.1,
+      "gc_content": null,
+      "genome_size": 1250000,
+      "n_contigs": 227,
+      "biosample_accn": "",
+      "protein_fasta": "gtdb_genomes/JBEXBW000000000/proteins.faa",
+      "eggnog_annotations": "gtdb_genomes/JBEXBW000000000/eggnog/eggnog.emapper.annotations",
+      "og_mapping": "gtdb_genomes/JBEXBW000000000/og_mapping.tsv"
     }
   ]
 }

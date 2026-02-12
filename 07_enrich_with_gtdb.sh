@@ -81,6 +81,30 @@ else
 fi
 echo ""
 
+# -------------------------------------------------------------------
+# Step 1b: Add Strigamia maritima symbiont (WGS-only genome)
+# -------------------------------------------------------------------
+echo "=================================================="
+echo "Step 1b: Adding Strigamia maritima symbiont"
+echo "=================================================="
+echo "  WGS accession: JBEXBW000000000"
+echo "  This genome was in Castelli et al. but missing from their shared alignments."
+echo ""
+
+python "$GTDB_HELPER" add-manual-genome \
+    --manifest "$MANIFEST" \
+    --wgs-accession JBEXBW000000000 \
+    --tip-name Symbiont_of_S_maritima \
+    --organism-name "endosymbiont of Strigamia maritima" \
+    --eggnog-db "$EGGNOG_DB_DIR" \
+    --castelli-og-dir "$CASTELLI_OG_DIR" \
+    --threads "$THREADS" \
+    --checkm-completeness 86.8 \
+    --checkm-contamination 1.1 \
+    --genome-size 1250000 \
+    --n-contigs 227
+echo ""
+
 # Count genomes by status
 N_NEW=$(python -c "import json; m=json.load(open('$MANIFEST')); print(sum(1 for g in m['genomes'] if g['status']=='new'))")
 echo "New genomes to add: $N_NEW"
@@ -196,17 +220,28 @@ echo ""
 echo "=================================================="
 echo "Step 9: Running IQ-TREE 3 with ModelFinder"
 echo "=================================================="
-echo "  Testing LG, WAG, JTT + mixture models LG+C20+F+R, LG+C60+F+R"
+echo "  Testing LG, WAG, JTT, Q.pfam + mixture models (C10/C20/C40/C60, LG4X)"
 echo "  1000 ultrafast bootstraps + SH-aLRT"
 echo ""
 
 # Remove previous tree files to allow re-run
 rm -f "$OUTPUT_DIR"/genome_tree.*
 
+# Create constraint tree enforcing outgroup monophyly
+# All taxa must be listed; outgroup clade resolved, ingroup as polytomy
+CONSTRAINT="$OUTPUT_DIR/constraint.tre"
+# Build constraint from taxa in the debiased alignment
+INGROUP=$(grep "^>" "$DEBIASED" | sed 's/>//' | grep -v "Outgroup_009649675" | grep -v "Thalassospira_profundimaris" | tr '\n' ',' | sed 's/,$//')
+echo "((Outgroup_009649675,Thalassospira_profundimaris),(${INGROUP}));" > "$CONSTRAINT"
+echo "  Constraint tree: $CONSTRAINT"
+echo "  Enforcing monophyly of Outgroup_009649675 + Thalassospira_profundimaris"
+echo ""
+
 iqtree3 -s "$DEBIASED" \
+    -g "$CONSTRAINT" \
     -m MFP \
-    -mset LG,WAG,JTT \
-    -madd LG+C20+F+R,LG+C60+F+R \
+    -mset LG,WAG,JTT,Q.pfam \
+    -madd LG+C10+F+R,LG+C20+F+R,LG+C40+F+R,LG+C60+F+R,Q.pfam+C60+F+R,LG4X+R \
     -B 1000 \
     --alrt 1000 \
     -T AUTO \
